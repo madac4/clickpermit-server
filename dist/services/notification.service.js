@@ -34,10 +34,8 @@ class NotificationService {
             const adminsAndModerators = await user_model_1.default.find({
                 role: { $in: [auth_types_1.UserRole.ADMIN, auth_types_1.UserRole.MODERATOR] },
             }).select('_id email');
-            if (!adminsAndModerators.length) {
-                console.log('No admins or moderators found to notify');
+            if (!adminsAndModerators.length)
                 return;
-            }
             const recipientIds = adminsAndModerators.map(user => user._id.toString());
             recipientIds.map(async (id) => {
                 const notificationData = {
@@ -54,7 +52,6 @@ class NotificationService {
                     actionText: 'View Order',
                 };
                 await this.createNotification(notificationData);
-                console.log(`Order creation notification sent to admin/moderator ${id}`);
             });
             const emailData = {
                 orderNumber,
@@ -339,7 +336,6 @@ class NotificationService {
                 actionText: 'View Invoice',
             };
             await this.createNotification(notificationData);
-            console.log(`Invoice creation notification sent to user ${userId}`);
         }
         catch (error) {
             console.error('Failed to send invoice creation notification:', error);
