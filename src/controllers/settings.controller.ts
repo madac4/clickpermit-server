@@ -279,8 +279,6 @@ export const downloadFile = CatchAsyncErrors(
 
 		const settings = await Settings.findOne(settingsQuery).lean()
 
-		console.log(settings)
-
 		if (!settings)
 			return next(
 				new ErrorHandler('File not found or access denied', 404),

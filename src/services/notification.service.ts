@@ -56,10 +56,7 @@ export class NotificationService {
 				role: { $in: [UserRole.ADMIN, UserRole.MODERATOR] },
 			}).select('_id email')
 
-			if (!adminsAndModerators.length) {
-				console.log('No admins or moderators found to notify')
-				return
-			}
+			if (!adminsAndModerators.length) return
 
 			const recipientIds = adminsAndModerators.map(user =>
 				user._id.toString(),
@@ -81,10 +78,6 @@ export class NotificationService {
 				}
 
 				await this.createNotification(notificationData)
-
-				console.log(
-					`Order creation notification sent to admin/moderator ${id}`,
-				)
 			})
 
 			const emailData = {
@@ -507,8 +500,6 @@ export class NotificationService {
 			}
 
 			await this.createNotification(notificationData)
-
-			console.log(`Invoice creation notification sent to user ${userId}`)
 		} catch (error: any) {
 			console.error(
 				'Failed to send invoice creation notification:',
