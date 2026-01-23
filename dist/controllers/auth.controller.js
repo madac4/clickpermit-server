@@ -103,12 +103,12 @@ exports.forgotPassword = (0, ErrorHandler_1.CatchAsyncErrors)(async (req, res, n
             resetToken,
             frontendOrigin: process.env.FRONTEND_ORIGIN,
         }, email, `Reset Your Click Permit Password`);
+        res.status(200).json((0, response_types_1.SuccessResponse)(null, `Password reset email sent to ${email}`));
     }
     catch (error) {
         await resetTokenDoc.deleteOne();
         return next(new ErrorHandler_1.ErrorHandler('Failed to send reset email', 500));
     }
-    res.status(200).json((0, response_types_1.SuccessResponse)(null, `Password reset email sent to ${email}`));
 });
 exports.resetPassword = (0, ErrorHandler_1.CatchAsyncErrors)(async (req, res, next) => {
     const { token, password, confirmPassword } = req.body;

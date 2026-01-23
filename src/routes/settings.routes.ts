@@ -31,7 +31,7 @@ SettingsRoutes.post(
 )
 SettingsRoutes.get('/carrier-numbers/files', authMiddleware, getCarrierFiles)
 SettingsRoutes.get(
-	'/carrier-numbers/files/:filename/:userId',
+	'/carrier-numbers/files/:filename',
 	authMiddleware,
 	downloadFile,
 )

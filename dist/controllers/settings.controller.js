@@ -156,8 +156,9 @@ exports.getCarrierFiles = (0, ErrorHandler_1.CatchAsyncErrors)(async (req, res, 
     res.status(200).json((0, response_types_1.SuccessResponse)(files, 'Files fetched successfully'));
 });
 exports.downloadFile = (0, ErrorHandler_1.CatchAsyncErrors)(async (req, res, next) => {
-    const { filename, userId } = req.params;
+    const { filename } = req.params;
     const { id, role } = req.user;
+    const { userId } = req.query;
     let settingsQuery = {
         userId: id,
         'carrierNumbers.files.filename': filename,
@@ -165,7 +166,11 @@ exports.downloadFile = (0, ErrorHandler_1.CatchAsyncErrors)(async (req, res, nex
     if (role === auth_types_1.UserRole.ADMIN || role === auth_types_1.UserRole.MODERATOR) {
         settingsQuery.userId = userId;
     }
+    if (!filename) {
+        return next(new ErrorHandler_1.ErrorHandler('Filename is required', 400));
+    }
     const settings = await settings_model_1.default.findOne(settingsQuery).lean();
+    console.log(settings);
     if (!settings)
         return next(new ErrorHandler_1.ErrorHandler('File not found or access denied', 404));
     const fileData = settings.carrierNumbers.files.find(file => file.filename === filename);

@@ -203,7 +203,10 @@ export const moderateOrder = CatchAsyncErrors(
 		await notificationService.notifyOrderModerated(orderId, userId)
 
 		res.status(200).json(
-			SuccessResponse(orderDTO, 'Order moderated successfully'),
+			SuccessResponse(
+				orderDTO,
+				'This order is now being moderated by you',
+			),
 		)
 	},
 )
@@ -254,9 +257,7 @@ export const getOrders = CatchAsyncErrors(
 			],
 		}
 
-		if (userRole === UserRole.USER) {
-			query.userId = userId
-		}
+		if (userRole === UserRole.USER) query.userId = userId
 
 		const orders = await Order.find(query)
 			.sort({ createdAt: -1 })
