@@ -188,14 +188,14 @@ export const forgotPassword = CatchAsyncErrors(
 				email,
 				`Reset Your Click Permit Password`,
 			)
+
+			res.status(200).json(
+				SuccessResponse(null, `Password reset email sent to ${email}`),
+			)
 		} catch (error: any) {
 			await resetTokenDoc.deleteOne()
 			return next(new ErrorHandler('Failed to send reset email', 500))
 		}
-
-		res.status(200).json(
-			SuccessResponse(null, `Password reset email sent to ${email}`),
-		)
 	},
 )
 

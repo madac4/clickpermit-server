@@ -1,4 +1,5 @@
 import { NextFunction, Request, Response } from 'express'
+import { PaginatedOrderDTO } from '../dto/order.dto'
 import Invoice from '../models/invoice.model'
 import Order from '../models/order.model'
 import Settings from '../models/settings.model'
@@ -11,7 +12,7 @@ import {
 	InvoiceQuery,
 	UpdateInvoiceRequest,
 } from '../types/invoice.types'
-import { OrderStatus } from '../types/order.types'
+import { IOrder, OrderStatus } from '../types/order.types'
 import {
 	CreatePaginationMeta,
 	PaginatedResponse,
@@ -42,7 +43,6 @@ export const getUsersForInvoice = CatchAsyncErrors(
 			}),
 		)
 
-		// Filter to only include users with complete company info
 		const usersWithCompleteCompanyInfo = usersWithCompanyInfo.filter(
 			user =>
 				user.companyInfo &&
@@ -59,6 +59,89 @@ export const getUsersForInvoice = CatchAsyncErrors(
 			SuccessResponse(
 				usersWithCompleteCompanyInfo,
 				'Users with complete company info fetched successfully',
+			),
+		)
+	},
+)
+
+export const getOrdersForInvoicePreview = CatchAsyncErrors(
+	async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+		const {
+			userId,
+			startDate,
+			endDate,
+			page = '1',
+			limit = '10',
+			search = '',
+		} = req.query
+
+		if (!userId || !startDate || !endDate) {
+			return next(
+				new ErrorHandler(
+					'User ID, start date, and end date are required',
+					400,
+				),
+			)
+		}
+
+		const start = new Date(startDate as string)
+		const end = new Date(endDate as string)
+
+		if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+			return next(new ErrorHandler('Invalid date format', 400))
+		}
+
+		if (start > end) {
+			return next(
+				new ErrorHandler('Start date must be before end date', 400),
+			)
+		}
+
+		const pageNum = parseInt(page as string, 10)
+		const limitNum = parseInt(limit as string, 10)
+		const skip = (pageNum - 1) * limitNum
+
+		const query: any = {
+			userId: userId,
+			permitStartDate: {
+				$gte: start,
+				$lte: end,
+			},
+			status: OrderStatus.REQUIRES_INVOICE,
+		}
+
+		if (search) {
+			query.$or = [
+				{ orderNumber: { $regex: search, $options: 'i' } },
+				{ contact: { $regex: search, $options: 'i' } },
+				{ commodity: { $regex: search, $options: 'i' } },
+				{ destinationAddress: { $regex: search, $options: 'i' } },
+				{ originAddress: { $regex: search, $options: 'i' } },
+			]
+		}
+
+		const [orders, totalItems] = await Promise.all([
+			Order.find(query)
+				.populate('truckId', 'unitNumber')
+				.populate('trailerId', 'unitNumber')
+				.populate('userId', 'email')
+				.sort({ permitStartDate: 1 })
+				.skip(skip)
+				.limit(limitNum)
+				.lean(),
+			Order.countDocuments(query),
+		])
+
+		const orderDtos = orders.map(
+			order => new PaginatedOrderDTO(order as IOrder),
+		)
+		const meta = CreatePaginationMeta(totalItems, pageNum, limitNum)
+
+		res.status(200).json(
+			PaginatedResponse(
+				orderDtos,
+				meta,
+				`Found ${totalItems} orders for the selected period`,
 			),
 		)
 	},

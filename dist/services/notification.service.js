@@ -119,11 +119,13 @@ class NotificationService {
             }
             const orderUser = order.userId;
             const recipientId = orderUser._id.toString() === uploadedBy
-                ? order.moderatorId._id
-                : orderUser._id;
+                ? order.moderatorId?._id
+                : orderUser?._id;
             const recipientEmail = orderUser._id.toString() === uploadedBy
-                ? order.moderatorId.email
-                : orderUser.email;
+                ? order.moderatorId?.email
+                : orderUser?.email;
+            if (!recipientId || !recipientEmail)
+                return;
             const notificationData = {
                 recipientId,
                 senderId: uploadedBy,
@@ -200,7 +202,7 @@ class NotificationService {
     }
     async getUserNotifications(userId, query) {
         try {
-            const { unreadOnly, page, limit, status, type, startDate, endDate } = query;
+            const { unreadOnly, page, limit, status, type, startDate, endDate, } = query;
             const filter = { recipientId: userId };
             if (unreadOnly) {
                 filter.status = notification_types_1.NotificationStatus.UNREAD;

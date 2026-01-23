@@ -36,7 +36,8 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.downloadInvoice = exports.sendInvoiceEmail = exports.deleteInvoice = exports.updateInvoice = exports.getInvoices = exports.getInvoiceById = exports.createInvoice = exports.getUsersForInvoice = void 0;
+exports.downloadInvoice = exports.sendInvoiceEmail = exports.deleteInvoice = exports.updateInvoice = exports.getInvoices = exports.getInvoiceById = exports.createInvoice = exports.getOrdersForInvoicePreview = exports.getUsersForInvoice = void 0;
+const order_dto_1 = require("../dto/order.dto");
 const invoice_model_1 = __importDefault(require("../models/invoice.model"));
 const order_model_1 = __importDefault(require("../models/order.model"));
 const settings_model_1 = __importDefault(require("../models/settings.model"));
@@ -64,7 +65,6 @@ exports.getUsersForInvoice = (0, ErrorHandler_1.CatchAsyncErrors)(async (req, re
             companyInfo: settings?.companyInfo || null,
         };
     }));
-    // Filter to only include users with complete company info
     const usersWithCompleteCompanyInfo = usersWithCompanyInfo.filter(user => user.companyInfo &&
         user.companyInfo.name &&
         user.companyInfo.address &&
@@ -74,6 +74,54 @@ exports.getUsersForInvoice = (0, ErrorHandler_1.CatchAsyncErrors)(async (req, re
         user.companyInfo.phone &&
         user.companyInfo.email);
     res.status(200).json((0, response_types_1.SuccessResponse)(usersWithCompleteCompanyInfo, 'Users with complete company info fetched successfully'));
+});
+exports.getOrdersForInvoicePreview = (0, ErrorHandler_1.CatchAsyncErrors)(async (req, res, next) => {
+    const { userId, startDate, endDate, page = '1', limit = '10', search = '', } = req.query;
+    if (!userId || !startDate || !endDate) {
+        return next(new ErrorHandler_1.ErrorHandler('User ID, start date, and end date are required', 400));
+    }
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+        return next(new ErrorHandler_1.ErrorHandler('Invalid date format', 400));
+    }
+    if (start > end) {
+        return next(new ErrorHandler_1.ErrorHandler('Start date must be before end date', 400));
+    }
+    const pageNum = parseInt(page, 10);
+    const limitNum = parseInt(limit, 10);
+    const skip = (pageNum - 1) * limitNum;
+    const query = {
+        userId: userId,
+        permitStartDate: {
+            $gte: start,
+            $lte: end,
+        },
+        status: order_types_1.OrderStatus.REQUIRES_INVOICE,
+    };
+    if (search) {
+        query.$or = [
+            { orderNumber: { $regex: search, $options: 'i' } },
+            { contact: { $regex: search, $options: 'i' } },
+            { commodity: { $regex: search, $options: 'i' } },
+            { destinationAddress: { $regex: search, $options: 'i' } },
+            { originAddress: { $regex: search, $options: 'i' } },
+        ];
+    }
+    const [orders, totalItems] = await Promise.all([
+        order_model_1.default.find(query)
+            .populate('truckId', 'unitNumber')
+            .populate('trailerId', 'unitNumber')
+            .populate('userId', 'email')
+            .sort({ permitStartDate: 1 })
+            .skip(skip)
+            .limit(limitNum)
+            .lean(),
+        order_model_1.default.countDocuments(query),
+    ]);
+    const orderDtos = orders.map(order => new order_dto_1.PaginatedOrderDTO(order));
+    const meta = (0, response_types_1.CreatePaginationMeta)(totalItems, pageNum, limitNum);
+    res.status(200).json((0, response_types_1.PaginatedResponse)(orderDtos, meta, `Found ${totalItems} orders for the selected period`));
 });
 exports.createInvoice = (0, ErrorHandler_1.CatchAsyncErrors)(async (req, res, next) => {
     const { userId, startDate, endDate, charges } = req.body;

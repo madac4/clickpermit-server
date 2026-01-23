@@ -184,12 +184,14 @@ export class NotificationService {
 
 			const recipientId =
 				orderUser._id.toString() === uploadedBy
-					? order.moderatorId._id
-					: orderUser._id
+					? order.moderatorId?._id
+					: orderUser?._id
 			const recipientEmail =
 				orderUser._id.toString() === uploadedBy
-					? order.moderatorId.email
-					: orderUser.email
+					? order.moderatorId?.email
+					: orderUser?.email
+
+			if (!recipientId || !recipientEmail) return
 
 			const notificationData: INotificationCreateRequest = {
 				recipientId,
@@ -300,20 +302,28 @@ export class NotificationService {
 		query: PaginationQuery,
 	): Promise<PaginatedModel<NotificationDTO>> {
 		try {
-			const { unreadOnly, page, limit, status, type, startDate, endDate } = query
+			const {
+				unreadOnly,
+				page,
+				limit,
+				status,
+				type,
+				startDate,
+				endDate,
+			} = query
 
 			const filter: any = { recipientId: userId }
-			
+
 			if (unreadOnly) {
 				filter.status = NotificationStatus.UNREAD
 			} else if (status) {
 				filter.status = status
 			}
-			
+
 			if (type) {
 				filter.type = type
 			}
-			
+
 			if (startDate || endDate) {
 				filter.createdAt = {}
 				if (startDate) {

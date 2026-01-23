@@ -132,7 +132,7 @@ exports.moderateOrder = (0, ErrorHandler_1.CatchAsyncErrors)(async (req, res, ne
         return next(new ErrorHandler_1.ErrorHandler('User settings not found', 404));
     const orderDTO = new order_dto_1.ModeratorOrderDTO(order, userSettings);
     await notification_service_1.notificationService.notifyOrderModerated(orderId, userId);
-    res.status(200).json((0, response_types_1.SuccessResponse)(orderDTO, 'Order moderated successfully'));
+    res.status(200).json((0, response_types_1.SuccessResponse)(orderDTO, 'This order is now being moderated by you'));
 });
 exports.duplicateOrder = (0, ErrorHandler_1.CatchAsyncErrors)(async (req, res, next) => {
     const userId = req.user.userId;
@@ -163,9 +163,8 @@ exports.getOrders = (0, ErrorHandler_1.CatchAsyncErrors)(async (req, res) => {
             { originAddress: { $regex: search, $options: 'i' } },
         ],
     };
-    if (userRole === auth_types_1.UserRole.USER) {
+    if (userRole === auth_types_1.UserRole.USER)
         query.userId = userId;
-    }
     const orders = await order_model_1.default.find(query)
         .sort({ createdAt: -1 })
         .skip(skip)

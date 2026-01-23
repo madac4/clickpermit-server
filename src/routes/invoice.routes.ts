@@ -5,6 +5,7 @@ import {
 	downloadInvoice,
 	getInvoiceById,
 	getInvoices,
+	getOrdersForInvoicePreview,
 	getUsersForInvoice,
 	sendInvoiceEmail,
 	updateInvoice,
@@ -20,6 +21,13 @@ InvoiceRoutes.get(
 	authMiddleware,
 	rolesMiddleware([UserRole.ADMIN]),
 	getUsersForInvoice,
+)
+
+InvoiceRoutes.get(
+	'/preview-orders',
+	authMiddleware,
+	rolesMiddleware([UserRole.ADMIN]),
+	getOrdersForInvoicePreview,
 )
 
 InvoiceRoutes.get('/', authMiddleware, getInvoices)

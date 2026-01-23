@@ -260,8 +260,9 @@ export const getCarrierFiles = CatchAsyncErrors(
 
 export const downloadFile = CatchAsyncErrors(
 	async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-		const { filename, userId } = req.params
+		const { filename } = req.params
 		const { id, role } = req.user
+		const { userId } = req.query
 
 		let settingsQuery = {
 			userId: id,
@@ -272,7 +273,13 @@ export const downloadFile = CatchAsyncErrors(
 			settingsQuery.userId = userId
 		}
 
+		if (!filename) {
+			return next(new ErrorHandler('Filename is required', 400))
+		}
+
 		const settings = await Settings.findOne(settingsQuery).lean()
+
+		console.log(settings)
 
 		if (!settings)
 			return next(
