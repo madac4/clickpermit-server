@@ -260,9 +260,9 @@ export const getCarrierFiles = CatchAsyncErrors(
 
 export const downloadFile = CatchAsyncErrors(
 	async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-		const { filename } = req.params
-		const { id, role } = req.user
-		const { userId } = req.query
+		const { filename } = req.params as { filename: string }
+		const { id, role } = req.user as { id: string; role: UserRole }
+		const { userId } = req.query as { userId: string }
 
 		let settingsQuery = {
 			userId: id,
