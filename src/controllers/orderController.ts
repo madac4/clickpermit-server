@@ -6,6 +6,8 @@ import {
 } from '../dto/order.dto'
 import Order from '../models/order.model'
 import Settings from '../models/settings.model'
+import Trailer from '../models/trailer.model'
+import Truck from '../models/truck.model'
 import { ChatService } from '../services/chat.service'
 import {
 	deleteFile,
@@ -213,24 +215,91 @@ export const moderateOrder = CatchAsyncErrors(
 
 export const duplicateOrder = CatchAsyncErrors(
 	async (req: Request, res: Response, next: NextFunction) => {
-		const userId = req.user.userId
+		const userId = req.user.id
+		const userRole = req.user.role
 		const { orderId } = req.params
 
 		if (!userId)
 			return next(new ErrorHandler('User not authenticated', 401))
 
-		const order = await Order.findById(orderId)
+		const settings = await Settings.findOne({ userId })
+		if (
+			!settings ||
+			!settings.carrierNumbers?.mcNumber ||
+			!settings.carrierNumbers?.dotNumber ||
+			!settings.carrierNumbers?.einNumber
+		) {
+			return next(
+				new ErrorHandler(
+					'Please complete your company information and carrier numbers in settings',
+					404,
+				),
+			)
+		}
 
-		if (!order) return next(new ErrorHandler('Order not found', 404))
+		let orderQuery: any = { _id: orderId }
+		if (userRole === UserRole.USER) {
+			orderQuery.userId = userId
+		}
 
-		const newOrder = await Order.create({
-			...order,
+		const originalOrder = await Order.findOne(orderQuery).lean()
+
+		if (!originalOrder)
+			return next(new ErrorHandler('Order not found', 404))
+
+		const newOrder = new Order({
 			userId,
+			contact: originalOrder.contact,
+			permitStartDate: originalOrder.permitStartDate,
+			truckId: originalOrder.truckId,
+			trailerId: originalOrder.trailerId,
+			commodity: originalOrder.commodity,
+			loadDims: originalOrder.loadDims,
+			lengthFt: originalOrder.lengthFt,
+			lengthIn: originalOrder.lengthIn,
+			widthFt: originalOrder.widthFt,
+			widthIn: originalOrder.widthIn,
+			heightFt: originalOrder.heightFt,
+			heightIn: originalOrder.heightIn,
+			rearOverhangFt: originalOrder.rearOverhangFt,
+			rearOverhangIn: originalOrder.rearOverhangIn,
+			makeModel: originalOrder.makeModel || '',
+			serial: originalOrder.serial || '',
+			singleMultiple: originalOrder.singleMultiple || '',
+			legalWeight: originalOrder.legalWeight,
+			originAddress: originalOrder.originAddress,
+			destinationAddress: originalOrder.destinationAddress,
+			stops: originalOrder.stops || [],
+			files: originalOrder.files || [],
+			status: OrderStatus.PENDING,
+			axleConfigs: originalOrder.axleConfigs || [],
+		})
+
+		const savedOrder = await newOrder.save()
+
+		if (!savedOrder)
+			return next(new ErrorHandler('Failed to duplicate order', 500))
+
+		await ChatService.sendSystemMessage(
+			savedOrder._id!.toString(),
+			`New order #${savedOrder.orderNumber} has been created (duplicated from #${originalOrder.orderNumber}). Status: ${formatStatus(savedOrder.status)}`,
+			'system',
+		)
+
+		await notificationService.notifyOrderCreated(
+			savedOrder._id!.toString(),
+			savedOrder.orderNumber!,
+			userId,
+		)
+
+		socketService.broadcastOrderUpdate(savedOrder._id!.toString(), {
+			type: 'order_created',
+			order: savedOrder,
 		})
 
 		res.status(201).json(
 			SuccessResponse(
-				new OrderDTO(newOrder),
+				new OrderDTO(savedOrder),
 				'Order duplicated successfully',
 			),
 		)
@@ -247,14 +316,38 @@ export const getOrders = CatchAsyncErrors(
 
 		const skip = (page - 1) * limit
 
+		// Find trucks and trailers matching the search term
+		const matchingTrucks = await Truck.find({
+			unitNumber: { $regex: search, $options: 'i' },
+		})
+			.select('_id')
+			.lean()
+
+		const matchingTrailers = await Trailer.find({
+			unitNumber: { $regex: search, $options: 'i' },
+		})
+			.select('_id')
+			.lean()
+
+		const truckIds = matchingTrucks.map(truck => truck._id.toString())
+		const trailerIds = matchingTrailers.map(trailer =>
+			trailer._id.toString(),
+		)
+
 		let query: any = {
 			status: { $in: statuses || [] },
 			$or: [
 				{ orderNumber: { $regex: search, $options: 'i' } },
-				{ 'truckId.unitNumber': { $regex: search, $options: 'i' } },
 				{ destinationAddress: { $regex: search, $options: 'i' } },
 				{ originAddress: { $regex: search, $options: 'i' } },
 			],
+		}
+
+		if (truckIds.length > 0) {
+			query.$or.push({ truckId: { $in: truckIds } })
+		}
+		if (trailerIds.length > 0) {
+			query.$or.push({ trailerId: { $in: trailerIds } })
 		}
 
 		if (userRole === UserRole.USER) query.userId = userId
