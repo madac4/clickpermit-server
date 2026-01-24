@@ -441,9 +441,12 @@ exports.downloadInvoice = (0, ErrorHandler_1.CatchAsyncErrors)(async (req, res, 
         // On Heroku or production, try to find Chrome
         if (process.env.NODE_ENV === 'production') {
             // Try multiple possible Chrome locations
+            // Note: chrome-for-testing buildpack uses /app/.chrome-for-testing/
             const possiblePaths = [
                 process.env.GOOGLE_CHROME_BIN,
                 process.env.CHROME_BIN,
+                '/app/.chrome-for-testing/chrome-linux64/chrome',
+                '/app/.chrome-for-testing/chrome',
                 '/app/.apt/usr/bin/google-chrome',
                 '/usr/bin/google-chrome',
                 '/usr/bin/chromium-browser',
