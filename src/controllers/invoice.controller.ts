@@ -582,7 +582,6 @@ export const sendInvoiceEmail = CatchAsyncErrors(
 	},
 )
 
-// Download invoice as PDF
 export const downloadInvoice = CatchAsyncErrors(
 	async (req: Request, res: Response, next: NextFunction): Promise<void> => {
 		const { id } = req.params
@@ -595,69 +594,58 @@ export const downloadInvoice = CatchAsyncErrors(
 			return next(new ErrorHandler('Invoice not found', 404))
 		}
 
-		// If user is not admin, only allow access to their own invoices
 		if (userRole !== UserRole.ADMIN && invoice.userId !== currentUserId) {
 			return next(new ErrorHandler('Access denied', 403))
 		}
 
 		let browser: any = null
 		try {
-			// Generate HTML for invoice
 			const html = generateInvoiceHTML(invoice)
 
-			// Import puppeteer dynamically
 			const puppeteer = await import('puppeteer')
 
-			// Configure browser launch options for production
 			const launchOptions: any = {
 				headless: true,
 				args: [
 					'--no-sandbox',
 					'--disable-setuid-sandbox',
 					'--disable-dev-shm-usage',
-					'--disable-accelerated-2d-canvas',
-					'--no-first-run',
-					'--no-zygote',
 					'--disable-gpu',
+					'--disable-extensions',
 				],
 			}
 
-			// Try to find Chrome/Chromium executable in production
-			if (process.env.NODE_ENV === 'production') {
-				// Common paths for Chrome/Chromium in different environments
+			if (process.env.CHROME_BIN) {
+				launchOptions.executablePath = process.env.CHROME_BIN
+				console.log(
+					`Using Chrome from CHROME_BIN: ${process.env.CHROME_BIN}`,
+				)
+			} else if (process.env.NODE_ENV === 'production') {
+				const fs = await import('fs')
 				const chromePaths = [
+					'/usr/bin/google-chrome',
 					'/usr/bin/chromium-browser',
 					'/usr/bin/chromium',
-					'/usr/bin/google-chrome-stable',
-					'/usr/bin/google-chrome',
-					'/snap/bin/chromium',
-					process.env.CHROME_BIN,
-				].filter(Boolean)
+				]
 
-				// Try to find an existing Chrome installation
 				for (const path of chromePaths) {
-					try {
-						const fs = await import('fs')
-						if (path && fs.existsSync(path)) {
-							launchOptions.executablePath = path
-							console.log(`Using Chrome at: ${path}`)
-							break
-						}
-					} catch (e) {
-						// Continue to next path
+					if (fs.existsSync(path)) {
+						launchOptions.executablePath = path
+						console.log(`Using Chrome at: ${path}`)
+						break
 					}
 				}
 			}
 
-			// Launch browser
 			browser = await puppeteer.default.launch(launchOptions)
 
 			const page = await browser.newPage()
 
-			// Set content and wait for it to load
-			await page.setContent(html, { waitUntil: 'networkidle0' })
+			await page.setContent(html, {
+				waitUntil: 'networkidle0',
+				timeout: 30000,
+			})
 
-			// Generate PDF
 			const pdf = await page.pdf({
 				format: 'A4',
 				printBackground: true,
@@ -672,7 +660,6 @@ export const downloadInvoice = CatchAsyncErrors(
 			await browser.close()
 			browser = null
 
-			// Set headers for PDF response
 			res.setHeader('Content-Type', 'application/pdf')
 			res.setHeader(
 				'Content-Disposition',
@@ -682,7 +669,6 @@ export const downloadInvoice = CatchAsyncErrors(
 			res.send(pdf)
 		} catch (error: any) {
 			console.error('PDF generation error:', error)
-			// Ensure browser is closed even if an error occurs
 			if (browser) {
 				try {
 					await browser.close()

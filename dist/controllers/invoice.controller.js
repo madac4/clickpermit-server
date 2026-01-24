@@ -411,7 +411,6 @@ exports.sendInvoiceEmail = (0, ErrorHandler_1.CatchAsyncErrors)(async (req, res,
     }, user.email, `Invoice ${invoice.invoiceNumber} - Click Permit`);
     res.status(200).json((0, response_types_1.SuccessResponse)(null, 'Invoice email sent successfully'));
 });
-// Download invoice as PDF
 exports.downloadInvoice = (0, ErrorHandler_1.CatchAsyncErrors)(async (req, res, next) => {
     const { id } = req.params;
     const userRole = req.user.role;
@@ -420,61 +419,48 @@ exports.downloadInvoice = (0, ErrorHandler_1.CatchAsyncErrors)(async (req, res, 
     if (!invoice) {
         return next(new ErrorHandler_1.ErrorHandler('Invoice not found', 404));
     }
-    // If user is not admin, only allow access to their own invoices
     if (userRole !== auth_types_1.UserRole.ADMIN && invoice.userId !== currentUserId) {
         return next(new ErrorHandler_1.ErrorHandler('Access denied', 403));
     }
     let browser = null;
     try {
-        // Generate HTML for invoice
         const html = generateInvoiceHTML(invoice);
-        // Import puppeteer dynamically
         const puppeteer = await Promise.resolve().then(() => __importStar(require('puppeteer')));
-        // Configure browser launch options for production
         const launchOptions = {
             headless: true,
             args: [
                 '--no-sandbox',
                 '--disable-setuid-sandbox',
                 '--disable-dev-shm-usage',
-                '--disable-accelerated-2d-canvas',
-                '--no-first-run',
-                '--no-zygote',
                 '--disable-gpu',
+                '--disable-extensions',
             ],
         };
-        // Try to find Chrome/Chromium executable in production
-        if (process.env.NODE_ENV === 'production') {
-            // Common paths for Chrome/Chromium in different environments
+        if (process.env.CHROME_BIN) {
+            launchOptions.executablePath = process.env.CHROME_BIN;
+            console.log(`Using Chrome from CHROME_BIN: ${process.env.CHROME_BIN}`);
+        }
+        else if (process.env.NODE_ENV === 'production') {
+            const fs = await Promise.resolve().then(() => __importStar(require('fs')));
             const chromePaths = [
+                '/usr/bin/google-chrome',
                 '/usr/bin/chromium-browser',
                 '/usr/bin/chromium',
-                '/usr/bin/google-chrome-stable',
-                '/usr/bin/google-chrome',
-                '/snap/bin/chromium',
-                process.env.CHROME_BIN,
-            ].filter(Boolean);
-            // Try to find an existing Chrome installation
+            ];
             for (const path of chromePaths) {
-                try {
-                    const fs = await Promise.resolve().then(() => __importStar(require('fs')));
-                    if (path && fs.existsSync(path)) {
-                        launchOptions.executablePath = path;
-                        console.log(`Using Chrome at: ${path}`);
-                        break;
-                    }
-                }
-                catch (e) {
-                    // Continue to next path
+                if (fs.existsSync(path)) {
+                    launchOptions.executablePath = path;
+                    console.log(`Using Chrome at: ${path}`);
+                    break;
                 }
             }
         }
-        // Launch browser
         browser = await puppeteer.default.launch(launchOptions);
         const page = await browser.newPage();
-        // Set content and wait for it to load
-        await page.setContent(html, { waitUntil: 'networkidle0' });
-        // Generate PDF
+        await page.setContent(html, {
+            waitUntil: 'networkidle0',
+            timeout: 30000,
+        });
         const pdf = await page.pdf({
             format: 'A4',
             printBackground: true,
@@ -487,14 +473,12 @@ exports.downloadInvoice = (0, ErrorHandler_1.CatchAsyncErrors)(async (req, res, 
         });
         await browser.close();
         browser = null;
-        // Set headers for PDF response
         res.setHeader('Content-Type', 'application/pdf');
         res.setHeader('Content-Disposition', `attachment; filename="Invoice-${invoice.invoiceNumber}.pdf"`);
         res.send(pdf);
     }
     catch (error) {
         console.error('PDF generation error:', error);
-        // Ensure browser is closed even if an error occurs
         if (browser) {
             try {
                 await browser.close();
