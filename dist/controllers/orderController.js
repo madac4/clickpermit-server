@@ -7,6 +7,8 @@ exports.updateOrderStatus = exports.deleteOrderFile = exports.getOrderFiles = ex
 const order_dto_1 = require("../dto/order.dto");
 const order_model_1 = __importDefault(require("../models/order.model"));
 const settings_model_1 = __importDefault(require("../models/settings.model"));
+const trailer_model_1 = __importDefault(require("../models/trailer.model"));
+const truck_model_1 = __importDefault(require("../models/truck.model"));
 const chat_service_1 = require("../services/chat.service");
 const gridfs_service_1 = require("../services/gridfs.service");
 const notification_service_1 = require("../services/notification.service");
@@ -135,18 +137,62 @@ exports.moderateOrder = (0, ErrorHandler_1.CatchAsyncErrors)(async (req, res, ne
     res.status(200).json((0, response_types_1.SuccessResponse)(orderDTO, 'This order is now being moderated by you'));
 });
 exports.duplicateOrder = (0, ErrorHandler_1.CatchAsyncErrors)(async (req, res, next) => {
-    const userId = req.user.userId;
+    const userId = req.user.id;
+    const userRole = req.user.role;
     const { orderId } = req.params;
     if (!userId)
         return next(new ErrorHandler_1.ErrorHandler('User not authenticated', 401));
-    const order = await order_model_1.default.findById(orderId);
-    if (!order)
+    const settings = await settings_model_1.default.findOne({ userId });
+    if (!settings ||
+        !settings.carrierNumbers?.mcNumber ||
+        !settings.carrierNumbers?.dotNumber ||
+        !settings.carrierNumbers?.einNumber) {
+        return next(new ErrorHandler_1.ErrorHandler('Please complete your company information and carrier numbers in settings', 404));
+    }
+    let orderQuery = { _id: orderId };
+    if (userRole === auth_types_1.UserRole.USER) {
+        orderQuery.userId = userId;
+    }
+    const originalOrder = await order_model_1.default.findOne(orderQuery).lean();
+    if (!originalOrder)
         return next(new ErrorHandler_1.ErrorHandler('Order not found', 404));
-    const newOrder = await order_model_1.default.create({
-        ...order,
+    const newOrder = new order_model_1.default({
         userId,
+        contact: originalOrder.contact,
+        permitStartDate: originalOrder.permitStartDate,
+        truckId: originalOrder.truckId,
+        trailerId: originalOrder.trailerId,
+        commodity: originalOrder.commodity,
+        loadDims: originalOrder.loadDims,
+        lengthFt: originalOrder.lengthFt,
+        lengthIn: originalOrder.lengthIn,
+        widthFt: originalOrder.widthFt,
+        widthIn: originalOrder.widthIn,
+        heightFt: originalOrder.heightFt,
+        heightIn: originalOrder.heightIn,
+        rearOverhangFt: originalOrder.rearOverhangFt,
+        rearOverhangIn: originalOrder.rearOverhangIn,
+        makeModel: originalOrder.makeModel || '',
+        serial: originalOrder.serial || '',
+        singleMultiple: originalOrder.singleMultiple || '',
+        legalWeight: originalOrder.legalWeight,
+        originAddress: originalOrder.originAddress,
+        destinationAddress: originalOrder.destinationAddress,
+        stops: originalOrder.stops || [],
+        files: originalOrder.files || [],
+        status: order_types_1.OrderStatus.PENDING,
+        axleConfigs: originalOrder.axleConfigs || [],
     });
-    res.status(201).json((0, response_types_1.SuccessResponse)(new order_dto_1.OrderDTO(newOrder), 'Order duplicated successfully'));
+    const savedOrder = await newOrder.save();
+    if (!savedOrder)
+        return next(new ErrorHandler_1.ErrorHandler('Failed to duplicate order', 500));
+    await chat_service_1.ChatService.sendSystemMessage(savedOrder._id.toString(), `New order #${savedOrder.orderNumber} has been created (duplicated from #${originalOrder.orderNumber}). Status: ${(0, order_types_1.formatStatus)(savedOrder.status)}`, 'system');
+    await notification_service_1.notificationService.notifyOrderCreated(savedOrder._id.toString(), savedOrder.orderNumber, userId);
+    socket_service_1.socketService.broadcastOrderUpdate(savedOrder._id.toString(), {
+        type: 'order_created',
+        order: savedOrder,
+    });
+    res.status(201).json((0, response_types_1.SuccessResponse)(new order_dto_1.OrderDTO(savedOrder), 'Order duplicated successfully'));
 });
 exports.getOrders = (0, ErrorHandler_1.CatchAsyncErrors)(async (req, res) => {
     const userId = req.user.id;
@@ -154,15 +200,33 @@ exports.getOrders = (0, ErrorHandler_1.CatchAsyncErrors)(async (req, res) => {
     const { page, limit, search } = req.query;
     const statuses = req.query['status[]'] || [];
     const skip = (page - 1) * limit;
+    // Find trucks and trailers matching the search term
+    const matchingTrucks = await truck_model_1.default.find({
+        unitNumber: { $regex: search, $options: 'i' },
+    })
+        .select('_id')
+        .lean();
+    const matchingTrailers = await trailer_model_1.default.find({
+        unitNumber: { $regex: search, $options: 'i' },
+    })
+        .select('_id')
+        .lean();
+    const truckIds = matchingTrucks.map(truck => truck._id.toString());
+    const trailerIds = matchingTrailers.map(trailer => trailer._id.toString());
     let query = {
         status: { $in: statuses || [] },
         $or: [
             { orderNumber: { $regex: search, $options: 'i' } },
-            { 'truckId.unitNumber': { $regex: search, $options: 'i' } },
             { destinationAddress: { $regex: search, $options: 'i' } },
             { originAddress: { $regex: search, $options: 'i' } },
         ],
     };
+    if (truckIds.length > 0) {
+        query.$or.push({ truckId: { $in: truckIds } });
+    }
+    if (trailerIds.length > 0) {
+        query.$or.push({ trailerId: { $in: trailerIds } });
+    }
     if (userRole === auth_types_1.UserRole.USER)
         query.userId = userId;
     const orders = await order_model_1.default.find(query)
@@ -173,6 +237,7 @@ exports.getOrders = (0, ErrorHandler_1.CatchAsyncErrors)(async (req, res) => {
         .populate('trailerId', 'unitNumber year make licencePlate state')
         .populate('userId', 'email')
         .lean();
+    console.log(orders);
     const totalItems = await order_model_1.default.countDocuments(query);
     const orderDtos = orders.map(order => new order_dto_1.PaginatedOrderDTO(order));
     const meta = (0, response_types_1.CreatePaginationMeta)(totalItems, page, limit);
