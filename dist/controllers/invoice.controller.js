@@ -430,11 +430,47 @@ exports.downloadInvoice = (0, ErrorHandler_1.CatchAsyncErrors)(async (req, res, 
         const html = generateInvoiceHTML(invoice);
         // Import puppeteer dynamically
         const puppeteer = await Promise.resolve().then(() => __importStar(require('puppeteer')));
-        // Launch browser
-        browser = await puppeteer.default.launch({
+        // Configure browser launch options for production
+        const launchOptions = {
             headless: true,
-            args: ['--no-sandbox', '--disable-setuid-sandbox'],
-        });
+            args: [
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-dev-shm-usage',
+                '--disable-accelerated-2d-canvas',
+                '--no-first-run',
+                '--no-zygote',
+                '--disable-gpu',
+            ],
+        };
+        // Try to find Chrome/Chromium executable in production
+        if (process.env.NODE_ENV === 'production') {
+            // Common paths for Chrome/Chromium in different environments
+            const chromePaths = [
+                '/usr/bin/chromium-browser',
+                '/usr/bin/chromium',
+                '/usr/bin/google-chrome-stable',
+                '/usr/bin/google-chrome',
+                '/snap/bin/chromium',
+                process.env.CHROME_BIN,
+            ].filter(Boolean);
+            // Try to find an existing Chrome installation
+            for (const path of chromePaths) {
+                try {
+                    const fs = await Promise.resolve().then(() => __importStar(require('fs')));
+                    if (path && fs.existsSync(path)) {
+                        launchOptions.executablePath = path;
+                        console.log(`Using Chrome at: ${path}`);
+                        break;
+                    }
+                }
+                catch (e) {
+                    // Continue to next path
+                }
+            }
+        }
+        // Launch browser
+        browser = await puppeteer.default.launch(launchOptions);
         const page = await browser.newPage();
         // Set content and wait for it to load
         await page.setContent(html, { waitUntil: 'networkidle0' });

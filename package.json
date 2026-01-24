@@ -9,6 +9,7 @@
 		"dev:ts": "ts-node-dev --respawn --transpile-only src/server.ts",
 		"build": "tsc",
 		"start": "node dist/server.js",
+		"postinstall": "node -e \"try { require('puppeteer').executablePath() } catch(e) { console.log('Puppeteer Chrome not found, please install manually or set PUPPETEER_SKIP_DOWNLOAD=false') }\"",
 		"heroku-postbuild": "NPM_CONFIG_PRODUCTION=false"
 	},
 	"dependencies": {
