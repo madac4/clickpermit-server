@@ -237,7 +237,6 @@ exports.getOrders = (0, ErrorHandler_1.CatchAsyncErrors)(async (req, res) => {
         .populate('trailerId', 'unitNumber year make licencePlate state')
         .populate('userId', 'email')
         .lean();
-    console.log(orders);
     const totalItems = await order_model_1.default.countDocuments(query);
     const orderDtos = orders.map(order => new order_dto_1.PaginatedOrderDTO(order));
     const meta = (0, response_types_1.CreatePaginationMeta)(totalItems, page, limit);

@@ -434,14 +434,45 @@ exports.downloadInvoice = (0, ErrorHandler_1.CatchAsyncErrors)(async (req, res, 
                 '--disable-dev-shm-usage',
                 '--disable-gpu',
                 '--disable-extensions',
+                '--single-process',
+                '--disable-accelerated-2d-canvas',
             ],
         };
+        // On Heroku or production, try to find Chrome
         if (process.env.NODE_ENV === 'production') {
-            const chromePath = process.env.GOOGLE_CHROME_BIN ||
-                process.env.CHROME_BIN ||
-                '/app/.chrome-for-testing/chrome-linux64/chrome';
-            launchOptions.executablePath = chromePath;
-            console.log(`Using Chrome at: ${chromePath}`);
+            // Try multiple possible Chrome locations
+            const possiblePaths = [
+                process.env.GOOGLE_CHROME_BIN,
+                process.env.CHROME_BIN,
+                '/app/.apt/usr/bin/google-chrome',
+                '/usr/bin/google-chrome',
+                '/usr/bin/chromium-browser',
+                '/usr/bin/chromium',
+            ].filter(Boolean);
+            // Try to use puppeteer's bundled Chrome first if available
+            try {
+                const executablePath = puppeteer.default.executablePath();
+                if (executablePath) {
+                    launchOptions.executablePath = executablePath;
+                    console.log(`Using Puppeteer bundled Chrome at: ${executablePath}`);
+                }
+            }
+            catch (error) {
+                // If puppeteer doesn't have bundled Chrome, try system paths
+                for (const path of possiblePaths) {
+                    const fs = await Promise.resolve().then(() => __importStar(require('fs')));
+                    if (fs.existsSync(path)) {
+                        launchOptions.executablePath = path;
+                        console.log(`Using Chrome at: ${path}`);
+                        break;
+                    }
+                }
+            }
+            if (!launchOptions.executablePath) {
+                console.error('Chrome not found at any known location');
+                console.log('Tried paths:', possiblePaths);
+                throw new Error('Chrome executable not found. Please ensure Chrome is installed via buildpack.');
+            }
         }
         browser = await puppeteer.default.launch(launchOptions);
         const page = await browser.newPage();
