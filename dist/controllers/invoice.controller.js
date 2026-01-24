@@ -436,24 +436,12 @@ exports.downloadInvoice = (0, ErrorHandler_1.CatchAsyncErrors)(async (req, res, 
                 '--disable-extensions',
             ],
         };
-        if (process.env.CHROME_BIN) {
-            launchOptions.executablePath = process.env.CHROME_BIN;
-            console.log(`Using Chrome from CHROME_BIN: ${process.env.CHROME_BIN}`);
-        }
-        else if (process.env.NODE_ENV === 'production') {
-            const fs = await Promise.resolve().then(() => __importStar(require('fs')));
-            const chromePaths = [
-                '/usr/bin/google-chrome',
-                '/usr/bin/chromium-browser',
-                '/usr/bin/chromium',
-            ];
-            for (const path of chromePaths) {
-                if (fs.existsSync(path)) {
-                    launchOptions.executablePath = path;
-                    console.log(`Using Chrome at: ${path}`);
-                    break;
-                }
-            }
+        if (process.env.NODE_ENV === 'production') {
+            const chromePath = process.env.GOOGLE_CHROME_BIN ||
+                process.env.CHROME_BIN ||
+                '/app/.chrome-for-testing/chrome-linux64/chrome';
+            launchOptions.executablePath = chromePath;
+            console.log(`Using Chrome at: ${chromePath}`);
         }
         browser = await puppeteer.default.launch(launchOptions);
         const page = await browser.newPage();
