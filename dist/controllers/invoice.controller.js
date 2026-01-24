@@ -438,11 +438,8 @@ exports.downloadInvoice = (0, ErrorHandler_1.CatchAsyncErrors)(async (req, res, 
                 '--disable-accelerated-2d-canvas',
             ],
         };
-        // On Heroku or production, try to find Chrome
         if (process.env.NODE_ENV === 'production') {
             const fs = await Promise.resolve().then(() => __importStar(require('fs')));
-            // Try multiple possible Chrome locations
-            // Note: chrome-for-testing buildpack uses /app/.chrome-for-testing/
             const possiblePaths = [
                 process.env.GOOGLE_CHROME_BIN,
                 process.env.CHROME_BIN,
@@ -453,7 +450,6 @@ exports.downloadInvoice = (0, ErrorHandler_1.CatchAsyncErrors)(async (req, res, 
                 '/usr/bin/chromium-browser',
                 '/usr/bin/chromium',
             ].filter(Boolean);
-            // Try to use puppeteer's bundled Chrome first if it exists
             try {
                 const executablePath = puppeteer.default.executablePath();
                 if (executablePath && fs.existsSync(executablePath)) {
@@ -464,7 +460,6 @@ exports.downloadInvoice = (0, ErrorHandler_1.CatchAsyncErrors)(async (req, res, 
             catch (error) {
                 console.log('Puppeteer bundled Chrome not available, checking system paths...');
             }
-            // If puppeteer Chrome not found, try system paths
             if (!launchOptions.executablePath) {
                 for (const path of possiblePaths) {
                     if (fs.existsSync(path)) {
