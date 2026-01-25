@@ -36,7 +36,8 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.downloadInvoice = exports.sendInvoiceEmail = exports.deleteInvoice = exports.updateInvoice = exports.getInvoices = exports.getInvoiceById = exports.createInvoice = exports.getOrdersForInvoicePreview = exports.getUsersForInvoice = void 0;
+exports.migrateInvoiceIds = exports.downloadInvoice = exports.sendInvoiceEmail = exports.deleteInvoice = exports.updateInvoice = exports.getInvoices = exports.getInvoiceById = exports.createInvoice = exports.getOrdersForInvoicePreview = exports.getUsersForInvoice = void 0;
+const mongoose_1 = require("mongoose");
 const order_dto_1 = require("../dto/order.dto");
 const invoice_model_1 = __importDefault(require("../models/invoice.model"));
 const order_model_1 = __importDefault(require("../models/order.model"));
@@ -263,35 +264,44 @@ exports.getInvoiceById = (0, ErrorHandler_1.CatchAsyncErrors)(async (req, res, n
     if (!invoice) {
         return next(new ErrorHandler_1.ErrorHandler('Invoice not found', 404));
     }
-    // If user is not admin, only allow access to their own invoices
-    if (userRole !== auth_types_1.UserRole.ADMIN && invoice.userId !== currentUserId) {
+    if (userRole !== auth_types_1.UserRole.ADMIN &&
+        invoice.userId.toString() !== currentUserId) {
         return next(new ErrorHandler_1.ErrorHandler('Access denied', 403));
     }
     res.status(200).json((0, response_types_1.SuccessResponse)(invoice, 'Invoice fetched successfully'));
 });
 exports.getInvoices = (0, ErrorHandler_1.CatchAsyncErrors)(async (req, res, next) => {
-    const { userId, startDate, endDate, page = '1', limit = '10', } = req.query;
+    const { userId, startDate, endDate, page = '1', limit = '10', search = '', } = req.query;
     const pageNum = parseInt(page.toString(), 10);
     const limitNum = parseInt(limit.toString(), 10);
     const skip = (pageNum - 1) * limitNum;
     const userRole = req.user.role;
     const currentUserId = req.user.userId || req.user.id;
     const filter = {};
-    // If user is not admin, only show their own invoices
     if (userRole !== auth_types_1.UserRole.ADMIN) {
         filter.userId = currentUserId;
     }
     else if (userId) {
-        // Admin can filter by userId if provided
         filter.userId = userId;
     }
+    if (search) {
+        filter.$or = [
+            { invoiceNumber: { $regex: search, $options: 'i' } },
+            { 'companyInfo.name': { $regex: search, $options: 'i' } },
+            { 'companyInfo.email': { $regex: search, $options: 'i' } },
+        ];
+    }
     if (startDate || endDate) {
-        filter.startDate = {};
+        filter.createdAt = {};
         if (startDate) {
-            filter.startDate.$gte = new Date(startDate);
+            const start = new Date(startDate);
+            start.setHours(0, 0, 0, 0);
+            filter.createdAt.$gte = start;
         }
         if (endDate) {
-            filter.startDate.$lte = new Date(endDate);
+            const end = new Date(endDate);
+            end.setHours(23, 59, 59, 999);
+            filter.createdAt.$lte = end;
         }
     }
     const [invoices, totalItems] = await Promise.all([
@@ -305,7 +315,6 @@ exports.getInvoices = (0, ErrorHandler_1.CatchAsyncErrors)(async (req, res, next
     const meta = (0, response_types_1.CreatePaginationMeta)(totalItems, pageNum, limitNum);
     res.status(200).json((0, response_types_1.PaginatedResponse)(invoices, meta, 'Invoices fetched successfully'));
 });
-// Update invoice (admin only)
 exports.updateInvoice = (0, ErrorHandler_1.CatchAsyncErrors)(async (req, res, next) => {
     const { id } = req.params;
     const { startDate, endDate, charges } = req.body;
@@ -328,12 +337,10 @@ exports.updateInvoice = (0, ErrorHandler_1.CatchAsyncErrors)(async (req, res, ne
         }
         invoice.endDate = end;
     }
-    // Validate dates
     if (invoice.startDate > invoice.endDate) {
         return next(new ErrorHandler_1.ErrorHandler('Start date must be before end date', 400));
     }
     if (charges && charges.length > 0) {
-        // Validate and calculate totals for charges
         for (const charge of charges) {
             if (!charge.state) {
                 return next(new ErrorHandler_1.ErrorHandler('State is required for all charges', 400));
@@ -359,14 +366,10 @@ exports.updateInvoice = (0, ErrorHandler_1.CatchAsyncErrors)(async (req, res, ne
 // Delete invoice (admin only)
 exports.deleteInvoice = (0, ErrorHandler_1.CatchAsyncErrors)(async (req, res, next) => {
     const { id } = req.params;
-    // Get invoice before deleting to access order information
     const invoice = await invoice_model_1.default.findById(id);
-    if (!invoice) {
+    if (!invoice)
         return next(new ErrorHandler_1.ErrorHandler('Invoice not found', 404));
-    }
-    // Extract order numbers from the invoice
     const orderNumbers = invoice.orders.map(order => order.orderNumber);
-    // Revert orders status from REQUIRES_CHARGE back to REQUIRES_INVOICE
     if (orderNumbers.length > 0) {
         try {
             await order_model_1.default.updateMany({
@@ -377,29 +380,20 @@ exports.deleteInvoice = (0, ErrorHandler_1.CatchAsyncErrors)(async (req, res, ne
         }
         catch (error) {
             console.error('Failed to revert orders status:', error);
-            // Continue with deletion even if status update fails
         }
     }
-    // Delete the invoice
     await invoice_model_1.default.findByIdAndDelete(id);
     res.status(200).json((0, response_types_1.SuccessResponse)(null, 'Invoice deleted successfully'));
 });
-// Send invoice email (admin only)
 exports.sendInvoiceEmail = (0, ErrorHandler_1.CatchAsyncErrors)(async (req, res, next) => {
     const { id } = req.params;
     const invoice = await invoice_model_1.default.findById(id).lean();
-    if (!invoice) {
+    if (!invoice)
         return next(new ErrorHandler_1.ErrorHandler('Invoice not found', 404));
-    }
     const user = await user_model_1.default.findById(invoice.userId);
-    if (!user) {
+    if (!user)
         return next(new ErrorHandler_1.ErrorHandler('User not found', 404));
-    }
     const invoiceUrl = `${process.env.FRONTEND_ORIGIN}/dashboard/invoices/${invoice._id}`;
-    const apiUrl = process.env.API_URL ||
-        process.env.FRONTEND_ORIGIN ||
-        'http://localhost:3000';
-    const downloadUrl = `${apiUrl}/api/invoices/${invoice._id}/download`;
     await email_service_1.EmailService.sendEmail('invoiceEmail', {
         invoiceNumber: invoice.invoiceNumber,
         totalAmount: invoice.totalAmount,
@@ -407,7 +401,6 @@ exports.sendInvoiceEmail = (0, ErrorHandler_1.CatchAsyncErrors)(async (req, res,
         endDate: invoice.endDate,
         createdAt: invoice.createdAt,
         invoiceUrl,
-        downloadUrl,
     }, user.email, `Invoice ${invoice.invoiceNumber} - Click Permit`);
     res.status(200).json((0, response_types_1.SuccessResponse)(null, 'Invoice email sent successfully'));
 });
@@ -416,10 +409,10 @@ exports.downloadInvoice = (0, ErrorHandler_1.CatchAsyncErrors)(async (req, res, 
     const userRole = req.user.role;
     const currentUserId = req.user.userId || req.user.id;
     const invoice = await invoice_model_1.default.findById(id).lean();
-    if (!invoice) {
+    if (!invoice)
         return next(new ErrorHandler_1.ErrorHandler('Invoice not found', 404));
-    }
-    if (userRole !== auth_types_1.UserRole.ADMIN && invoice.userId !== currentUserId) {
+    if (userRole !== auth_types_1.UserRole.ADMIN &&
+        invoice.userId.toString() !== currentUserId) {
         return next(new ErrorHandler_1.ErrorHandler('Access denied', 403));
     }
     let browser = null;
@@ -510,6 +503,49 @@ exports.downloadInvoice = (0, ErrorHandler_1.CatchAsyncErrors)(async (req, res, 
         return next(new ErrorHandler_1.ErrorHandler(`Failed to generate PDF: ${error.message}`, 500));
     }
 });
+// Migration endpoint to convert string IDs to ObjectId (admin only)
+exports.migrateInvoiceIds = (0, ErrorHandler_1.CatchAsyncErrors)(async (req, res, next) => {
+    const invoices = await invoice_model_1.default.find({
+        $or: [
+            { userId: { $type: 'string' } },
+            { createdBy: { $type: 'string' } },
+        ],
+    });
+    if (!invoices || invoices.length === 0) {
+        res.status(200).json((0, response_types_1.SuccessResponse)({ migratedCount: 0 }, 'No invoices need migration. All IDs are already ObjectId.'));
+        return;
+    }
+    let migratedCount = 0;
+    const errors = [];
+    for (const invoice of invoices) {
+        try {
+            let updated = false;
+            if (typeof invoice.userId === 'string') {
+                invoice.userId = new mongoose_1.Types.ObjectId(invoice.userId);
+                updated = true;
+            }
+            if (typeof invoice.createdBy === 'string') {
+                invoice.createdBy = new mongoose_1.Types.ObjectId(invoice.createdBy);
+                updated = true;
+            }
+            if (updated) {
+                await invoice.save();
+                migratedCount++;
+            }
+        }
+        catch (error) {
+            errors.push({
+                invoiceId: invoice._id,
+                error: error.message,
+            });
+        }
+    }
+    res.status(200).json((0, response_types_1.SuccessResponse)({
+        migratedCount,
+        totalFound: invoices.length,
+        errors: errors.length > 0 ? errors : undefined,
+    }, `Successfully migrated ${migratedCount} invoice(s) to ObjectId`));
+});
 // Helper function to generate invoice HTML
 function generateInvoiceHTML(invoice) {
     const formatDate = (date) => {
@@ -526,6 +562,11 @@ function generateInvoiceHTML(invoice) {
             currency: 'USD',
         }).format(amount);
     };
+    // <div class="issuer-info">
+    // 	<p><strong>Seven Summits Consulting, LLC</strong></p>
+    // 	<p>55 W Monroe St, Suite 3330</p>
+    // 	<p>Chicago, IL 60603</p>
+    // </div>
     return `
 <!DOCTYPE html>
 <html lang="en">
@@ -689,11 +730,6 @@ function generateInvoiceHTML(invoice) {
 				<p style="margin-top: 4px; color: #6b7280; font-size: 11px;">
 					Date: ${formatDate(invoice.createdAt)}
 				</p>
-			</div>
-			<div class="issuer-info">
-				<p><strong>Seven Summits Consulting, LLC</strong></p>
-				<p>55 W Monroe St, Suite 3330</p>
-				<p>Chicago, IL 60603</p>
 			</div>
 		</div>
 

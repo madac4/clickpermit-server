@@ -1,6 +1,6 @@
-import crypto from 'crypto'
 import { model, Schema } from 'mongoose'
 import { IInvoice } from '../types/invoice.types'
+import { getNextSequence } from './counter.model'
 
 const invoiceChargeSchema = new Schema({
 	state: { type: String, required: true, trim: true },
@@ -44,7 +44,8 @@ const invoiceSchema: Schema = new Schema<IInvoice>(
 			index: true,
 		},
 		userId: {
-			type: String,
+			type: Schema.Types.ObjectId,
+			ref: 'User',
 			required: true,
 			index: true,
 		},
@@ -80,7 +81,8 @@ const invoiceSchema: Schema = new Schema<IInvoice>(
 			default: 0,
 		},
 		createdBy: {
-			type: String,
+			type: Schema.Types.ObjectId,
+			ref: 'User',
 			required: true,
 			index: true,
 		},
@@ -93,29 +95,13 @@ const invoiceSchema: Schema = new Schema<IInvoice>(
 invoiceSchema.pre<IInvoice>('save', async function (next) {
 	if (this.isNew) {
 		if (!this.invoiceNumber) {
-			const Invoice = this.constructor as any
-			let attempts = 0
-			const maxAttempts = 10
-
-			while (attempts < maxAttempts) {
-				const randomNumber = crypto.randomInt(100000, 999999)
-				const invoiceNumber = `INV-${randomNumber}`
-
-				const existingInvoice = await Invoice.findOne({ invoiceNumber })
-
-				if (!existingInvoice) {
-					this.invoiceNumber = invoiceNumber
-					break
-				}
-
-				attempts++
-			}
-
-			if (attempts >= maxAttempts) {
+			try {
+				const nextNumber = await getNextSequence('invoiceNumber')
+				const invoiceNumber = `INV-${nextNumber.toString().padStart(6, '0')}`
+				this.invoiceNumber = invoiceNumber
+			} catch (error) {
 				return next(
-					new Error(
-						'Unable to generate unique order number after maximum attempts',
-					),
+					new Error('Unable to generate invoice number: ' + error),
 				)
 			}
 		}

@@ -18,20 +18,10 @@ router.use(authMiddleware)
 
 router.get('/', getNotifications)
 router.get('/stats', getNotificationStats)
-
-// Mark specific notifications as read
 router.patch('/mark-read', markNotificationsAsRead)
-
-// Mark all notifications as read
 router.patch('/mark-all-read', markAllNotificationsAsRead)
-
-// Update notification
 router.patch('/:id', updateNotification)
-
-// Delete notification
 router.delete('/:id', deleteNotification)
-
-// Create notification (admin/moderator only)
 router.post(
 	'/',
 	rolesMiddleware([UserRole.ADMIN, UserRole.MODERATOR]),

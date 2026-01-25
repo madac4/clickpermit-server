@@ -12,33 +12,20 @@ import {
 } from '../controllers/settings.controller'
 import { authMiddleware } from '../middleware/authMiddleware'
 
-const SettingsRoutes: Router = Router()
+const router: Router = Router()
 
-// Company info routes
-SettingsRoutes.get('/company-info', authMiddleware, getCompanySettings)
-SettingsRoutes.put('/company-info', authMiddleware, updateCompanyInfo)
-
-// Carrier numbers routes
-SettingsRoutes.get('/carrier-numbers', authMiddleware, getCarrierNumbers)
-SettingsRoutes.put('/carrier-numbers', authMiddleware, updateCarrierNumbers)
-
-// File management routes - explicitly set no parsing before multer
-SettingsRoutes.post(
+router.get('/company-info', authMiddleware, getCompanySettings)
+router.put('/company-info', authMiddleware, updateCompanyInfo)
+router.get('/carrier-numbers', authMiddleware, getCarrierNumbers)
+router.put('/carrier-numbers', authMiddleware, updateCarrierNumbers)
+router.post(
 	'/carrier-numbers/files',
 	authMiddleware,
 	upload.single('file'),
 	uploadCarrierFile,
 )
-SettingsRoutes.get('/carrier-numbers/files', authMiddleware, getCarrierFiles)
-SettingsRoutes.get(
-	'/carrier-numbers/files/:filename',
-	authMiddleware,
-	downloadFile,
-)
-SettingsRoutes.delete(
-	'/carrier-numbers/files/:filename',
-	authMiddleware,
-	deleteFile,
-)
+router.get('/carrier-numbers/files', authMiddleware, getCarrierFiles)
+router.get('/carrier-numbers/files/:filename', authMiddleware, downloadFile)
+router.delete('/carrier-numbers/files/:filename', authMiddleware, deleteFile)
 
-export default SettingsRoutes
+export default router

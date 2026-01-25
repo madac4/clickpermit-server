@@ -68,6 +68,10 @@ const userSchema: Schema = new Schema<IUser>({
 		type: Boolean,
 		default: false,
 	},
+	isBlocked: {
+		type: Boolean,
+		default: false,
+	},
 	createdAt: {
 		type: Date,
 		default: Date.now,
@@ -88,7 +92,12 @@ userSchema.methods.comparePassword = async function (
 
 userSchema.methods.signAccessToken = function (): string {
 	return jwt.sign(
-		{ userId: this._id, role: this.role, email: this.email, id: this._id },
+		{
+			userId: this._id,
+			role: this.role,
+			email: this.email,
+			id: this._id,
+		},
 		process.env.JWT_SECRET as string,
 		{
 			expiresIn: '1h',
@@ -98,7 +107,12 @@ userSchema.methods.signAccessToken = function (): string {
 
 userSchema.methods.signRefreshToken = function (): string {
 	return jwt.sign(
-		{ userId: this._id, role: this.role, email: this.email, id: this._id },
+		{
+			userId: this._id,
+			role: this.role,
+			email: this.email,
+			id: this._id,
+		},
 		process.env.JWT_SECRET as string,
 		{
 			expiresIn: '7d',

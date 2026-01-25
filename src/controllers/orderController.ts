@@ -8,6 +8,7 @@ import Order from '../models/order.model'
 import Settings from '../models/settings.model'
 import Trailer from '../models/trailer.model'
 import Truck from '../models/truck.model'
+import User from '../models/user.model'
 import { ChatService } from '../services/chat.service'
 import {
 	deleteFile,
@@ -608,11 +609,31 @@ export const deleteOrderFile = CatchAsyncErrors(
 
 export const updateOrderStatus = CatchAsyncErrors(
 	async (req: Request, res: Response, next: NextFunction) => {
+		const { userId } = req.user
 		const { orderId } = req.params
-		const { status } = req.body
+		const { status } = req.body as { status: OrderStatus }
 
 		const order = await Order.findById(orderId)
 		if (!order) return next(new ErrorHandler('Order not found', 404))
+
+		const user = await User.findById(userId)
+
+		if (!user) return next(new ErrorHandler('User not found', 404))
+
+		if (user.role === UserRole.MODERATOR) {
+			if (
+				status === OrderStatus.REQUIRES_CHARGE ||
+				status === OrderStatus.CHARGED ||
+				status === OrderStatus.FINISHED
+			) {
+				return next(
+					new ErrorHandler(
+						'You are not authorized to update order status',
+						403,
+					),
+				)
+			}
+		}
 
 		order.status = status
 		await order.save()

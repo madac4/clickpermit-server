@@ -6,6 +6,7 @@ export interface IUser extends Document {
 	password: string
 	role: UserRole
 	isEmailConfirmed: boolean
+	isBlocked: boolean
 	createdAt: Date
 	settingsId: string
 	comparePassword(password: string): Promise<boolean>

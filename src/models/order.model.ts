@@ -1,6 +1,6 @@
-import crypto from 'crypto'
 import { model, Schema } from 'mongoose'
 import { IOrder, OrderStatus } from '../types/order.types'
+import { getNextSequence } from './counter.model'
 
 const orderSchema: Schema = new Schema<IOrder>(
 	{
@@ -62,33 +62,17 @@ const orderSchema: Schema = new Schema<IOrder>(
 
 orderSchema.pre('save', async function (next) {
 	if (!this.orderNumber) {
-		const Order = this.constructor as any
-		let attempts = 0
-		const maxAttempts = 10
-
-		while (attempts < maxAttempts) {
-			const randomNumber = crypto.randomInt(100000, 999999)
-			const orderNumber = `ORD-${randomNumber}`
-
-			const existingOrder = await Order.findOne({ orderNumber })
-
-			if (!existingOrder) {
-				this.orderNumber = orderNumber
-				break
-			}
-
-			attempts++
+		try {
+			const nextNumber = await getNextSequence('orderNumber')
+			const orderNumber = `ORD-${nextNumber.toString().padStart(6, '0')}`
+			this.orderNumber = orderNumber
+			next()
+		} catch (error) {
+			return next(new Error('Unable to generate order number: ' + error))
 		}
-
-		if (attempts >= maxAttempts) {
-			return next(
-				new Error(
-					'Unable to generate unique order number after maximum attempts',
-				),
-			)
-		}
+	} else {
+		next()
 	}
-	next()
 })
 
 const Order = model<IOrder>('Order', orderSchema)
