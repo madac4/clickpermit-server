@@ -8,6 +8,7 @@ const auth_types_1 = require("../types/auth.types");
 const InvoiceRoutes = (0, express_1.Router)();
 InvoiceRoutes.get('/users', authMiddleware_1.authMiddleware, (0, rolesMiddleware_1.rolesMiddleware)([auth_types_1.UserRole.ADMIN]), invoice_controller_1.getUsersForInvoice);
 InvoiceRoutes.get('/preview-orders', authMiddleware_1.authMiddleware, (0, rolesMiddleware_1.rolesMiddleware)([auth_types_1.UserRole.ADMIN]), invoice_controller_1.getOrdersForInvoicePreview);
+InvoiceRoutes.post('/migrate-ids', invoice_controller_1.migrateInvoiceIds);
 InvoiceRoutes.get('/', authMiddleware_1.authMiddleware, invoice_controller_1.getInvoices);
 InvoiceRoutes.get('/:id', authMiddleware_1.authMiddleware, invoice_controller_1.getInvoiceById);
 InvoiceRoutes.post('/', authMiddleware_1.authMiddleware, (0, rolesMiddleware_1.rolesMiddleware)([auth_types_1.UserRole.ADMIN]), invoice_controller_1.createInvoice);

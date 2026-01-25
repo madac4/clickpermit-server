@@ -1,4 +1,4 @@
-import { Document } from 'mongoose'
+import { Document, Types } from 'mongoose'
 
 export interface IInvoiceCharge {
 	state: string
@@ -36,7 +36,7 @@ export interface IInvoiceOrder {
 export interface IInvoice extends Document {
 	_id: string
 	invoiceNumber: string
-	userId: string
+	userId: Types.ObjectId
 	companyInfo: {
 		name: string
 		dba?: string
@@ -53,7 +53,7 @@ export interface IInvoice extends Document {
 	orders: IInvoiceOrder[]
 	charges: IInvoiceCharge[]
 	totalAmount: number
-	createdBy: string // Admin user ID
+	createdBy: Types.ObjectId
 	createdAt: Date
 	updatedAt?: Date
 }
@@ -77,4 +77,5 @@ export type InvoiceQuery = {
 	endDate?: string
 	page?: number
 	limit?: number
+	search?: string
 }

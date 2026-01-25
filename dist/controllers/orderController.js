@@ -9,6 +9,7 @@ const order_model_1 = __importDefault(require("../models/order.model"));
 const settings_model_1 = __importDefault(require("../models/settings.model"));
 const trailer_model_1 = __importDefault(require("../models/trailer.model"));
 const truck_model_1 = __importDefault(require("../models/truck.model"));
+const user_model_1 = __importDefault(require("../models/user.model"));
 const chat_service_1 = require("../services/chat.service");
 const gridfs_service_1 = require("../services/gridfs.service");
 const notification_service_1 = require("../services/notification.service");
@@ -391,11 +392,22 @@ exports.deleteOrderFile = (0, ErrorHandler_1.CatchAsyncErrors)(async (req, res, 
     res.status(200).json((0, response_types_1.SuccessResponse)(null, 'File deleted successfully'));
 });
 exports.updateOrderStatus = (0, ErrorHandler_1.CatchAsyncErrors)(async (req, res, next) => {
+    const { userId } = req.user;
     const { orderId } = req.params;
     const { status } = req.body;
     const order = await order_model_1.default.findById(orderId);
     if (!order)
         return next(new ErrorHandler_1.ErrorHandler('Order not found', 404));
+    const user = await user_model_1.default.findById(userId);
+    if (!user)
+        return next(new ErrorHandler_1.ErrorHandler('User not found', 404));
+    if (user.role === auth_types_1.UserRole.MODERATOR) {
+        if (status === order_types_1.OrderStatus.REQUIRES_CHARGE ||
+            status === order_types_1.OrderStatus.CHARGED ||
+            status === order_types_1.OrderStatus.FINISHED) {
+            return next(new ErrorHandler_1.ErrorHandler('You are not authorized to update order status', 403));
+        }
+    }
     order.status = status;
     await order.save();
     socket_service_1.socketService.broadcastOrderUpdate(orderId, {

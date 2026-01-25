@@ -1,4 +1,6 @@
 import { NextFunction, Request, Response } from 'express'
+import { isValidObjectId } from 'mongoose'
+import { UserDetailDTO, UserWithSettingsDTO } from '../dto/user.dto'
 import Settings from '../models/settings.model'
 import User from '../models/user.model'
 import { UserRole } from '../types/auth.types'
@@ -8,7 +10,7 @@ import {
 	PaginationQuery,
 	SuccessResponse,
 } from '../types/response.types'
-import { CatchAsyncErrors } from '../utils/ErrorHandler'
+import { CatchAsyncErrors, ErrorHandler } from '../utils/ErrorHandler'
 
 export const getUsers = CatchAsyncErrors(
 	async (req: Request, res: Response, next: NextFunction) => {
@@ -22,43 +24,30 @@ export const getUsers = CatchAsyncErrors(
 
 export const getAllUsersWithSettings = CatchAsyncErrors(
 	async (req: Request, res: Response, next: NextFunction) => {
-		const query = req.query as unknown as PaginationQuery
-		const page = Number(query.page) || 1
-		const limit = Number(query.limit) || 20
-		const roleFilter = query.role as UserRole | undefined
-		const search = (query.search as string) || ''
+		const { page, limit, role, search } =
+			req.query as unknown as PaginationQuery
 
-		// Build filter
 		const filter: any = {
 			role: { $in: [UserRole.USER, UserRole.MODERATOR] },
 		}
 
-		// Apply role filter if specified
-		if (
-			roleFilter &&
-			(roleFilter === UserRole.USER || roleFilter === UserRole.MODERATOR)
-		) {
-			filter.role = roleFilter
+		if (role && (role === UserRole.USER || role === UserRole.MODERATOR)) {
+			filter.role = role
 		}
 
-		// Apply search filter if provided
 		if (search) {
 			filter.$or = [{ email: { $regex: search, $options: 'i' } }]
 		}
 
-		// Get total count
 		const total = await User.countDocuments(filter)
 
-		// Fetch users and moderators with pagination
 		const skip = (page - 1) * limit
 		const users = await User.find(filter)
 			.select('_id email role isEmailConfirmed createdAt')
 			.sort({ createdAt: -1 })
 			.skip(skip)
 			.limit(limit)
-			.lean()
 
-		// Fetch settings for all users
 		const userIds = users.map(user => user._id.toString())
 		const settingsMap = new Map()
 
@@ -68,54 +57,71 @@ export const getAllUsersWithSettings = CatchAsyncErrors(
 			})
 				.select('userId companyInfo')
 				.lean()
-
 			settings.forEach(setting => {
 				settingsMap.set(setting.userId, setting.companyInfo)
 			})
 		}
 
-		// Combine user data with settings
 		const usersWithSettings = users.map(user => {
 			const userId = user._id.toString()
-			const companyInfo = settingsMap.get(userId) || null
-
-			return {
-				id: userId,
-				email: user.email,
-				role: user.role,
-				isEmailConfirmed: user.isEmailConfirmed,
-				createdAt: user.createdAt,
-				companyInfo: companyInfo
-					? {
-							name: companyInfo.name || null,
-							phone: companyInfo.phone || null,
-							email: companyInfo.email || null,
-						}
-					: null,
-			}
+			const companyInfo = settingsMap.get(userId)
+			return new UserWithSettingsDTO(user, companyInfo)
 		})
 
-		// Separate users and moderators
-		const regularUsers = usersWithSettings.filter(
-			user => user.role === UserRole.USER,
-		)
-		const moderators = usersWithSettings.filter(
-			user => user.role === UserRole.MODERATOR,
-		)
-
-		// Create pagination meta
 		const meta: PaginationMeta = CreatePaginationMeta(total, page, limit)
 
-		// Return as paginated response with the object wrapped
 		res.status(200).json({
 			status: 200,
 			success: true,
-			message: 'Users and moderators fetched successfully',
+			message: 'Users fetched successfully',
 			data: {
-				users: regularUsers,
-				moderators: moderators,
+				users: usersWithSettings,
 			},
 			meta,
 		})
+	},
+)
+
+export const getUserById = CatchAsyncErrors(
+	async (req: Request, res: Response, next: NextFunction) => {
+		const { id } = req.params
+
+		if (!isValidObjectId(id))
+			return next(new ErrorHandler('User not found', 404))
+
+		const user = await User.findById(id).select(
+			'_id email role isEmailConfirmed isBlocked createdAt',
+		)
+
+		if (!user) return next(new ErrorHandler('User not found', 404))
+
+		const settings = await Settings.findOne({ userId: id }).select(
+			'companyInfo carrierNumbers',
+		)
+
+		const userDTO = new UserDetailDTO(user, settings)
+
+		res.status(200).json(
+			SuccessResponse(userDTO, 'User fetched successfully'),
+		)
+	},
+)
+
+export const toggleUserBlock = CatchAsyncErrors(
+	async (req: Request, res: Response, next: NextFunction) => {
+		const { id } = req.params
+
+		const user = await User.findById(id)
+		if (!user) return next(new ErrorHandler('User not found', 404))
+
+		user.isBlocked = !user.isBlocked
+		await user.save()
+
+		res.status(200).json(
+			SuccessResponse(
+				{ id: user._id, isBlocked: user.isBlocked },
+				`User ${user.isBlocked ? 'blocked' : 'unblocked'} successfully`,
+			),
+		)
 	},
 )

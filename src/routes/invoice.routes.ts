@@ -7,6 +7,7 @@ import {
 	getInvoices,
 	getOrdersForInvoicePreview,
 	getUsersForInvoice,
+	migrateInvoiceIds,
 	sendInvoiceEmail,
 	updateInvoice,
 } from '../controllers/invoice.controller'
@@ -29,6 +30,8 @@ InvoiceRoutes.get(
 	rolesMiddleware([UserRole.ADMIN]),
 	getOrdersForInvoicePreview,
 )
+
+InvoiceRoutes.post('/migrate-ids', migrateInvoiceIds)
 
 InvoiceRoutes.get('/', authMiddleware, getInvoices)
 InvoiceRoutes.get('/:id', authMiddleware, getInvoiceById)

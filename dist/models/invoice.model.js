@@ -1,10 +1,7 @@
 "use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 Object.defineProperty(exports, "__esModule", { value: true });
-const crypto_1 = __importDefault(require("crypto"));
 const mongoose_1 = require("mongoose");
+const counter_model_1 = require("./counter.model");
 const invoiceChargeSchema = new mongoose_1.Schema({
     state: { type: String, required: true, trim: true },
     oversize: { type: Number, required: true, default: 0 },
@@ -44,7 +41,8 @@ const invoiceSchema = new mongoose_1.Schema({
         index: true,
     },
     userId: {
-        type: String,
+        type: mongoose_1.Schema.Types.ObjectId,
+        ref: 'User',
         required: true,
         index: true,
     },
@@ -80,7 +78,8 @@ const invoiceSchema = new mongoose_1.Schema({
         default: 0,
     },
     createdBy: {
-        type: String,
+        type: mongoose_1.Schema.Types.ObjectId,
+        ref: 'User',
         required: true,
         index: true,
     },
@@ -90,21 +89,13 @@ const invoiceSchema = new mongoose_1.Schema({
 invoiceSchema.pre('save', async function (next) {
     if (this.isNew) {
         if (!this.invoiceNumber) {
-            const Invoice = this.constructor;
-            let attempts = 0;
-            const maxAttempts = 10;
-            while (attempts < maxAttempts) {
-                const randomNumber = crypto_1.default.randomInt(100000, 999999);
-                const invoiceNumber = `INV-${randomNumber}`;
-                const existingInvoice = await Invoice.findOne({ invoiceNumber });
-                if (!existingInvoice) {
-                    this.invoiceNumber = invoiceNumber;
-                    break;
-                }
-                attempts++;
+            try {
+                const nextNumber = await (0, counter_model_1.getNextSequence)('invoiceNumber');
+                const invoiceNumber = `INV-${nextNumber.toString().padStart(6, '0')}`;
+                this.invoiceNumber = invoiceNumber;
             }
-            if (attempts >= maxAttempts) {
-                return next(new Error('Unable to generate unique order number after maximum attempts'));
+            catch (error) {
+                return next(new Error('Unable to generate invoice number: ' + error));
             }
         }
     }

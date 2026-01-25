@@ -26,8 +26,11 @@ import { validatePassword } from '../utils/validators'
 export const register = CatchAsyncErrors(
 	async (req: Request, res: Response, next: NextFunction) => {
 		const { email, password, role }: RegisterRequest = req.body
-		const user = decodeToken(req) as JwtDTO
+		const decoded = await decodeToken(req, res, next)
 
+		if (decoded instanceof ErrorHandler) return next(decoded)
+
+		const user = decoded as JwtDTO
 		let response = null
 
 		if (user.role !== UserRole.ADMIN && role === UserRole.MODERATOR) {
@@ -79,6 +82,14 @@ export const login = CatchAsyncErrors(
 				new ErrorHandler(
 					'You do not have an account, please register',
 					400,
+				),
+			)
+
+		if (user.isBlocked)
+			return next(
+				new ErrorHandler(
+					'Your account is blocked, please contact support',
+					403,
 				),
 			)
 
@@ -150,6 +161,14 @@ export const refreshToken = CatchAsyncErrors(
 
 		if (!user) return next(new ErrorHandler('User not found', 404))
 
+		if (user.isBlocked)
+			return next(
+				new ErrorHandler(
+					'Your account is blocked, please contact support',
+					403,
+				),
+			)
+
 		const accessToken = user.signAccessToken()
 
 		res.status(200).json(
@@ -169,6 +188,14 @@ export const forgotPassword = CatchAsyncErrors(
 
 		const user = await User.findOne({ email })
 		if (!user) return next(new ErrorHandler('User not found', 404))
+
+		if (user.isBlocked)
+			return next(
+				new ErrorHandler(
+					'Your account is blocked, please contact support',
+					403,
+				),
+			)
 
 		const resetToken = crypto.randomBytes(32).toString('hex')
 		const resetTokenDoc = new ResetToken({
@@ -227,6 +254,14 @@ export const resetPassword = CatchAsyncErrors(
 		)
 		if (!user) return next(new ErrorHandler('User not found', 404))
 
+		if (user.isBlocked)
+			return next(
+				new ErrorHandler(
+					'Your account is blocked, please contact support',
+					403,
+				),
+			)
+
 		const isMatch = await user.comparePassword(password)
 		if (isMatch)
 			return next(
@@ -272,7 +307,13 @@ export const updatePassword = CatchAsyncErrors(
 
 export const logout = CatchAsyncErrors(
 	async (req: Request, res: Response, next: NextFunction) => {
-		const { userId }: { userId: string } = req.user
+		let userId: string
+
+		if (req.user) {
+			userId = req.user.userId
+		} else {
+			userId = req.query.userId as string
+		}
 
 		if (!userId) return next(new ErrorHandler('User ID is required', 400))
 

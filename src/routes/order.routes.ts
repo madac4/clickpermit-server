@@ -19,41 +19,34 @@ import { UserRole } from '../types/auth.types'
 
 const router = Router()
 
-router.get('/paginated', authMiddleware, getOrders)
-router.get('/statuses/:type', authMiddleware, getStatuses)
+router.use(authMiddleware)
+
+router.get('/paginated', getOrders)
+router.get('/statuses/:type', getStatuses)
 router.post(
 	'/create',
-	authMiddleware,
 	rolesMiddleware([UserRole.USER]),
 	upload.array('files'),
 	createOrder,
 )
-router.post('/duplicate/:orderId', authMiddleware, duplicateOrder)
-router.get('/:orderNumber', authMiddleware, getOrderByNumber)
-router.get('/:orderId/files/:filename', authMiddleware, downloadOrderFile)
+router.post('/duplicate/:orderId', duplicateOrder)
+router.get('/:orderNumber', getOrderByNumber)
+router.get('/:orderId/files/:filename', downloadOrderFile)
 router.post(
 	'/:orderId/moderate',
-	authMiddleware,
 	rolesMiddleware([UserRole.ADMIN, UserRole.MODERATOR]),
 	moderateOrder,
 )
 
 router.put(
 	'/:orderId/status',
-	authMiddleware,
-	rolesMiddleware([UserRole.ADMIN]),
+	rolesMiddleware([UserRole.ADMIN, UserRole.MODERATOR]),
 	updateOrderStatus,
 )
 
-// File management routes
-router.post(
-	'/:orderId/files',
-	authMiddleware,
-	upload.single('file'),
-	uploadOrderFile,
-)
-router.get('/:orderId/files', authMiddleware, getOrderFiles)
-router.get('/:orderId/files/:filename', authMiddleware, downloadOrderFile)
-router.delete('/:orderId/files/:filename', authMiddleware, deleteOrderFile)
+router.post('/:orderId/files', upload.single('file'), uploadOrderFile)
+router.get('/:orderId/files', getOrderFiles)
+router.get('/:orderId/files/:filename', downloadOrderFile)
+router.delete('/:orderId/files/:filename', deleteOrderFile)
 
 export default router

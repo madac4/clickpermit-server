@@ -12,16 +12,16 @@ import {
 } from '../controllers/auth.controller'
 import { authMiddleware } from '../middleware/authMiddleware'
 
-const AuthRoutes: Router = Router()
+const router: Router = Router()
 
-AuthRoutes.post('/login', login)
-AuthRoutes.post('/register', register)
-AuthRoutes.post('/confirm-email', confirmEmail)
-AuthRoutes.post('/resend-confirmation', resendConfirmationEmail)
-AuthRoutes.post('/refresh-token', refreshToken)
-AuthRoutes.post('/reset-password', resetPassword)
-AuthRoutes.post('/logout', authMiddleware, logout)
-AuthRoutes.post('/forgot-password', forgotPassword)
-AuthRoutes.post('/update-password', authMiddleware, updatePassword)
+router.post('/login', login)
+router.post('/register', register)
+router.post('/confirm-email', confirmEmail)
+router.post('/refresh-token', refreshToken)
+router.post('/reset-password', resetPassword)
+router.post('/logout', authMiddleware, logout)
+router.post('/forgot-password', forgotPassword)
+router.post('/resend-confirmation', resendConfirmationEmail)
+router.post('/update-password', authMiddleware, updatePassword)
 
-export default AuthRoutes
+export default router

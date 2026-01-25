@@ -18,7 +18,10 @@ const ErrorHandler_1 = require("../utils/ErrorHandler");
 const validators_1 = require("../utils/validators");
 exports.register = (0, ErrorHandler_1.CatchAsyncErrors)(async (req, res, next) => {
     const { email, password, role } = req.body;
-    const user = (0, authMiddleware_1.decodeToken)(req);
+    const decoded = await (0, authMiddleware_1.decodeToken)(req, res, next);
+    if (decoded instanceof ErrorHandler_1.ErrorHandler)
+        return next(decoded);
+    const user = decoded;
     let response = null;
     if (user.role !== auth_types_1.UserRole.ADMIN && role === auth_types_1.UserRole.MODERATOR) {
         return next(new ErrorHandler_1.ErrorHandler('You are not authorized to register a moderator', 403));
@@ -44,6 +47,8 @@ exports.login = (0, ErrorHandler_1.CatchAsyncErrors)(async (req, res, next) => {
     const user = await user_model_1.default.findOne({ email }).select('+password');
     if (!user)
         return next(new ErrorHandler_1.ErrorHandler('You do not have an account, please register', 400));
+    if (user.isBlocked)
+        return next(new ErrorHandler_1.ErrorHandler('Your account is blocked, please contact support', 403));
     if (!user.isEmailConfirmed)
         return next(new ErrorHandler_1.ErrorHandler('Please confirm your email address before logging in', 400));
     const isMatch = await user.comparePassword(password);
@@ -81,6 +86,8 @@ exports.refreshToken = (0, ErrorHandler_1.CatchAsyncErrors)(async (req, res, nex
     const user = await user_model_1.default.findById(decoded.userId);
     if (!user)
         return next(new ErrorHandler_1.ErrorHandler('User not found', 404));
+    if (user.isBlocked)
+        return next(new ErrorHandler_1.ErrorHandler('Your account is blocked, please contact support', 403));
     const accessToken = user.signAccessToken();
     res.status(200).json((0, response_types_1.SuccessResponse)({ accessToken }, 'Refresh token successful'));
 });
@@ -91,6 +98,8 @@ exports.forgotPassword = (0, ErrorHandler_1.CatchAsyncErrors)(async (req, res, n
     const user = await user_model_1.default.findOne({ email });
     if (!user)
         return next(new ErrorHandler_1.ErrorHandler('User not found', 404));
+    if (user.isBlocked)
+        return next(new ErrorHandler_1.ErrorHandler('Your account is blocked, please contact support', 403));
     const resetToken = crypto_1.default.randomBytes(32).toString('hex');
     const resetTokenDoc = new reset_token_model_1.default({
         token: resetToken,
@@ -126,6 +135,8 @@ exports.resetPassword = (0, ErrorHandler_1.CatchAsyncErrors)(async (req, res, ne
     const user = await user_model_1.default.findById(resetTokenDoc.userId).select('+password');
     if (!user)
         return next(new ErrorHandler_1.ErrorHandler('User not found', 404));
+    if (user.isBlocked)
+        return next(new ErrorHandler_1.ErrorHandler('Your account is blocked, please contact support', 403));
     const isMatch = await user.comparePassword(password);
     if (isMatch)
         return next(new ErrorHandler_1.ErrorHandler('New password cannot be the same as the old password', 400));
@@ -145,7 +156,13 @@ exports.updatePassword = (0, ErrorHandler_1.CatchAsyncErrors)(async (req, res, n
     res.status(200).json(response);
 });
 exports.logout = (0, ErrorHandler_1.CatchAsyncErrors)(async (req, res, next) => {
-    const { userId } = req.user;
+    let userId;
+    if (req.user) {
+        userId = req.user.userId;
+    }
+    else {
+        userId = req.query.userId;
+    }
     if (!userId)
         return next(new ErrorHandler_1.ErrorHandler('User ID is required', 400));
     const tokenDocs = await refresh_token_model_1.default.find({ userId });

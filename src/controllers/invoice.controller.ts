@@ -1,4 +1,5 @@
 import { NextFunction, Request, Response } from 'express'
+import { Types } from 'mongoose'
 import { PaginatedOrderDTO } from '../dto/order.dto'
 import Invoice from '../models/invoice.model'
 import Order from '../models/order.model'
@@ -357,8 +358,10 @@ export const getInvoiceById = CatchAsyncErrors(
 			return next(new ErrorHandler('Invoice not found', 404))
 		}
 
-		// If user is not admin, only allow access to their own invoices
-		if (userRole !== UserRole.ADMIN && invoice.userId !== currentUserId) {
+		if (
+			userRole !== UserRole.ADMIN &&
+			invoice.userId.toString() !== currentUserId
+		) {
 			return next(new ErrorHandler('Access denied', 403))
 		}
 
@@ -376,6 +379,7 @@ export const getInvoices = CatchAsyncErrors(
 			endDate,
 			page = '1',
 			limit = '10',
+			search = '',
 		} = req.query as InvoiceQuery
 
 		const pageNum = parseInt(page.toString(), 10)
@@ -387,21 +391,31 @@ export const getInvoices = CatchAsyncErrors(
 
 		const filter: any = {}
 
-		// If user is not admin, only show their own invoices
 		if (userRole !== UserRole.ADMIN) {
 			filter.userId = currentUserId
 		} else if (userId) {
-			// Admin can filter by userId if provided
 			filter.userId = userId
 		}
 
+		if (search) {
+			filter.$or = [
+				{ invoiceNumber: { $regex: search, $options: 'i' } },
+				{ 'companyInfo.name': { $regex: search, $options: 'i' } },
+				{ 'companyInfo.email': { $regex: search, $options: 'i' } },
+			]
+		}
+
 		if (startDate || endDate) {
-			filter.startDate = {}
+			filter.createdAt = {}
 			if (startDate) {
-				filter.startDate.$gte = new Date(startDate)
+				const start = new Date(startDate)
+				start.setHours(0, 0, 0, 0)
+				filter.createdAt.$gte = start
 			}
 			if (endDate) {
-				filter.startDate.$lte = new Date(endDate)
+				const end = new Date(endDate)
+				end.setHours(23, 59, 59, 999)
+				filter.createdAt.$lte = end
 			}
 		}
 
@@ -422,7 +436,6 @@ export const getInvoices = CatchAsyncErrors(
 	},
 )
 
-// Update invoice (admin only)
 export const updateInvoice = CatchAsyncErrors(
 	async (req: Request, res: Response, next: NextFunction): Promise<void> => {
 		const { id } = req.params
@@ -451,7 +464,6 @@ export const updateInvoice = CatchAsyncErrors(
 			invoice.endDate = end
 		}
 
-		// Validate dates
 		if (invoice.startDate > invoice.endDate) {
 			return next(
 				new ErrorHandler('Start date must be before end date', 400),
@@ -459,7 +471,6 @@ export const updateInvoice = CatchAsyncErrors(
 		}
 
 		if (charges && charges.length > 0) {
-			// Validate and calculate totals for charges
 			for (const charge of charges) {
 				if (!charge.state) {
 					return next(
@@ -502,17 +513,12 @@ export const deleteInvoice = CatchAsyncErrors(
 	async (req: Request, res: Response, next: NextFunction): Promise<void> => {
 		const { id } = req.params
 
-		// Get invoice before deleting to access order information
 		const invoice = await Invoice.findById(id)
 
-		if (!invoice) {
-			return next(new ErrorHandler('Invoice not found', 404))
-		}
+		if (!invoice) return next(new ErrorHandler('Invoice not found', 404))
 
-		// Extract order numbers from the invoice
 		const orderNumbers = invoice.orders.map(order => order.orderNumber)
 
-		// Revert orders status from REQUIRES_CHARGE back to REQUIRES_INVOICE
 		if (orderNumbers.length > 0) {
 			try {
 				await Order.updateMany(
@@ -525,11 +531,9 @@ export const deleteInvoice = CatchAsyncErrors(
 				)
 			} catch (error: any) {
 				console.error('Failed to revert orders status:', error)
-				// Continue with deletion even if status update fails
 			}
 		}
 
-		// Delete the invoice
 		await Invoice.findByIdAndDelete(id)
 
 		res.status(200).json(
@@ -538,28 +542,18 @@ export const deleteInvoice = CatchAsyncErrors(
 	},
 )
 
-// Send invoice email (admin only)
 export const sendInvoiceEmail = CatchAsyncErrors(
 	async (req: Request, res: Response, next: NextFunction): Promise<void> => {
 		const { id } = req.params
 
 		const invoice = await Invoice.findById(id).lean()
 
-		if (!invoice) {
-			return next(new ErrorHandler('Invoice not found', 404))
-		}
+		if (!invoice) return next(new ErrorHandler('Invoice not found', 404))
 
 		const user = await User.findById(invoice.userId)
-		if (!user) {
-			return next(new ErrorHandler('User not found', 404))
-		}
+		if (!user) return next(new ErrorHandler('User not found', 404))
 
 		const invoiceUrl = `${process.env.FRONTEND_ORIGIN}/dashboard/invoices/${invoice._id}`
-		const apiUrl =
-			process.env.API_URL ||
-			process.env.FRONTEND_ORIGIN ||
-			'http://localhost:3000'
-		const downloadUrl = `${apiUrl}/api/invoices/${invoice._id}/download`
 
 		await EmailService.sendEmail(
 			'invoiceEmail',
@@ -570,7 +564,6 @@ export const sendInvoiceEmail = CatchAsyncErrors(
 				endDate: invoice.endDate,
 				createdAt: invoice.createdAt,
 				invoiceUrl,
-				downloadUrl,
 			},
 			user.email,
 			`Invoice ${invoice.invoiceNumber} - Click Permit`,
@@ -590,11 +583,12 @@ export const downloadInvoice = CatchAsyncErrors(
 
 		const invoice = await Invoice.findById(id).lean()
 
-		if (!invoice) {
-			return next(new ErrorHandler('Invoice not found', 404))
-		}
+		if (!invoice) return next(new ErrorHandler('Invoice not found', 404))
 
-		if (userRole !== UserRole.ADMIN && invoice.userId !== currentUserId) {
+		if (
+			userRole !== UserRole.ADMIN &&
+			invoice.userId.toString() !== currentUserId
+		) {
 			return next(new ErrorHandler('Access denied', 403))
 		}
 
@@ -713,6 +707,70 @@ export const downloadInvoice = CatchAsyncErrors(
 	},
 )
 
+// Migration endpoint to convert string IDs to ObjectId (admin only)
+export const migrateInvoiceIds = CatchAsyncErrors(
+	async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+		const invoices = await Invoice.find({
+			$or: [
+				{ userId: { $type: 'string' } },
+				{ createdBy: { $type: 'string' } },
+			],
+		})
+
+		if (!invoices || invoices.length === 0) {
+			res.status(200).json(
+				SuccessResponse(
+					{ migratedCount: 0 },
+					'No invoices need migration. All IDs are already ObjectId.',
+				),
+			)
+			return
+		}
+
+		let migratedCount = 0
+		const errors: any[] = []
+
+		for (const invoice of invoices) {
+			try {
+				let updated = false
+
+				if (typeof invoice.userId === 'string') {
+					invoice.userId = new Types.ObjectId(invoice.userId) as any
+					updated = true
+				}
+
+				if (typeof invoice.createdBy === 'string') {
+					invoice.createdBy = new Types.ObjectId(
+						invoice.createdBy,
+					) as any
+					updated = true
+				}
+
+				if (updated) {
+					await invoice.save()
+					migratedCount++
+				}
+			} catch (error: any) {
+				errors.push({
+					invoiceId: invoice._id,
+					error: error.message,
+				})
+			}
+		}
+
+		res.status(200).json(
+			SuccessResponse(
+				{
+					migratedCount,
+					totalFound: invoices.length,
+					errors: errors.length > 0 ? errors : undefined,
+				},
+				`Successfully migrated ${migratedCount} invoice(s) to ObjectId`,
+			),
+		)
+	},
+)
+
 // Helper function to generate invoice HTML
 function generateInvoiceHTML(invoice: any): string {
 	const formatDate = (date: Date | string) => {
@@ -730,6 +788,12 @@ function generateInvoiceHTML(invoice: any): string {
 			currency: 'USD',
 		}).format(amount)
 	}
+
+	// <div class="issuer-info">
+	// 	<p><strong>Seven Summits Consulting, LLC</strong></p>
+	// 	<p>55 W Monroe St, Suite 3330</p>
+	// 	<p>Chicago, IL 60603</p>
+	// </div>
 
 	return `
 <!DOCTYPE html>
@@ -894,11 +958,6 @@ function generateInvoiceHTML(invoice: any): string {
 				<p style="margin-top: 4px; color: #6b7280; font-size: 11px;">
 					Date: ${formatDate(invoice.createdAt)}
 				</p>
-			</div>
-			<div class="issuer-info">
-				<p><strong>Seven Summits Consulting, LLC</strong></p>
-				<p>55 W Monroe St, Suite 3330</p>
-				<p>Chicago, IL 60603</p>
 			</div>
 		</div>
 
