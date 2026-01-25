@@ -762,6 +762,7 @@ export const migrateInvoiceIds = CatchAsyncErrors(
 			SuccessResponse(
 				{
 					migratedCount,
+					invoicesFound: invoices,
 					totalFound: invoices.length,
 					errors: errors.length > 0 ? errors : undefined,
 				},
