@@ -542,6 +542,7 @@ exports.migrateInvoiceIds = (0, ErrorHandler_1.CatchAsyncErrors)(async (req, res
     }
     res.status(200).json((0, response_types_1.SuccessResponse)({
         migratedCount,
+        invoicesFound: invoices,
         totalFound: invoices.length,
         errors: errors.length > 0 ? errors : undefined,
     }, `Successfully migrated ${migratedCount} invoice(s) to ObjectId`));
