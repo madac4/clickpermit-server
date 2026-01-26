@@ -36,8 +36,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.migrateInvoiceIds = exports.downloadInvoice = exports.sendInvoiceEmail = exports.deleteInvoice = exports.updateInvoice = exports.getInvoices = exports.getInvoiceById = exports.createInvoice = exports.getOrdersForInvoicePreview = exports.getUsersForInvoice = void 0;
-const mongoose_1 = require("mongoose");
+exports.downloadInvoice = exports.sendInvoiceEmail = exports.deleteInvoice = exports.updateInvoice = exports.getInvoices = exports.getInvoiceById = exports.createInvoice = exports.getOrdersForInvoicePreview = exports.getUsersForInvoice = void 0;
 const order_dto_1 = require("../dto/order.dto");
 const invoice_model_1 = __importDefault(require("../models/invoice.model"));
 const order_model_1 = __importDefault(require("../models/order.model"));
@@ -503,51 +502,6 @@ exports.downloadInvoice = (0, ErrorHandler_1.CatchAsyncErrors)(async (req, res, 
         return next(new ErrorHandler_1.ErrorHandler(`Failed to generate PDF: ${error.message}`, 500));
     }
 });
-// Migration endpoint to convert string IDs to ObjectId (admin only)
-exports.migrateInvoiceIds = (0, ErrorHandler_1.CatchAsyncErrors)(async (req, res, next) => {
-    const invoices = await invoice_model_1.default.find({
-        $or: [
-            { userId: { $type: 'string' } },
-            { createdBy: { $type: 'string' } },
-        ],
-    });
-    if (!invoices || invoices.length === 0) {
-        res.status(200).json((0, response_types_1.SuccessResponse)({ migratedCount: 0 }, 'No invoices need migration. All IDs are already ObjectId.'));
-        return;
-    }
-    let migratedCount = 0;
-    const errors = [];
-    for (const invoice of invoices) {
-        try {
-            let updated = false;
-            if (typeof invoice.userId === 'string') {
-                invoice.userId = new mongoose_1.Types.ObjectId(invoice.userId);
-                updated = true;
-            }
-            if (typeof invoice.createdBy === 'string') {
-                invoice.createdBy = new mongoose_1.Types.ObjectId(invoice.createdBy);
-                updated = true;
-            }
-            if (updated) {
-                await invoice.save();
-                migratedCount++;
-            }
-        }
-        catch (error) {
-            errors.push({
-                invoiceId: invoice._id,
-                error: error.message,
-            });
-        }
-    }
-    res.status(200).json((0, response_types_1.SuccessResponse)({
-        migratedCount,
-        invoicesFound: invoices,
-        totalFound: invoices.length,
-        errors: errors.length > 0 ? errors : undefined,
-    }, `Successfully migrated ${migratedCount} invoice(s) to ObjectId`));
-});
-// Helper function to generate invoice HTML
 function generateInvoiceHTML(invoice) {
     const formatDate = (date) => {
         const d = new Date(date);
