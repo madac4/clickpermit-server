@@ -1,5 +1,4 @@
 import { NextFunction, Request, Response } from 'express'
-import { Types } from 'mongoose'
 import { PaginatedOrderDTO } from '../dto/order.dto'
 import Invoice from '../models/invoice.model'
 import Order from '../models/order.model'
@@ -707,72 +706,6 @@ export const downloadInvoice = CatchAsyncErrors(
 	},
 )
 
-// Migration endpoint to convert string IDs to ObjectId (admin only)
-export const migrateInvoiceIds = CatchAsyncErrors(
-	async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-		const invoices = await Invoice.find({
-			$or: [
-				{ userId: { $type: 'string' } },
-				{ createdBy: { $type: 'string' } },
-			],
-		})
-
-		if (!invoices || invoices.length === 0) {
-			res.status(200).json(
-				SuccessResponse(
-					{ migratedCount: 0 },
-					'No invoices need migration. All IDs are already ObjectId.',
-				),
-			)
-			return
-		}
-
-		let migratedCount = 0
-		const errors: any[] = []
-
-		for (const invoice of invoices) {
-			try {
-				let updated = false
-
-				if (typeof invoice.userId === 'string') {
-					invoice.userId = new Types.ObjectId(invoice.userId) as any
-					updated = true
-				}
-
-				if (typeof invoice.createdBy === 'string') {
-					invoice.createdBy = new Types.ObjectId(
-						invoice.createdBy,
-					) as any
-					updated = true
-				}
-
-				if (updated) {
-					await invoice.save()
-					migratedCount++
-				}
-			} catch (error: any) {
-				errors.push({
-					invoiceId: invoice._id,
-					error: error.message,
-				})
-			}
-		}
-
-		res.status(200).json(
-			SuccessResponse(
-				{
-					migratedCount,
-					invoicesFound: invoices,
-					totalFound: invoices.length,
-					errors: errors.length > 0 ? errors : undefined,
-				},
-				`Successfully migrated ${migratedCount} invoice(s) to ObjectId`,
-			),
-		)
-	},
-)
-
-// Helper function to generate invoice HTML
 function generateInvoiceHTML(invoice: any): string {
 	const formatDate = (date: Date | string) => {
 		const d = new Date(date)
