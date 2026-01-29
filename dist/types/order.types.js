@@ -19,6 +19,7 @@ var OrderStatusType;
     OrderStatusType["COMPLETED"] = "completed";
     OrderStatusType["PAID"] = "paid";
     OrderStatusType["ARCHIVED"] = "archived";
+    OrderStatusType["REQUIRES_INVOICE"] = "requires_invoice";
 })(OrderStatusType || (exports.OrderStatusType = OrderStatusType = {}));
 const formatStatus = (status) => {
     return status

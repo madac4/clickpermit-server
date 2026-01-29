@@ -201,7 +201,6 @@ exports.getOrders = (0, ErrorHandler_1.CatchAsyncErrors)(async (req, res) => {
     const { page, limit, search } = req.query;
     const statuses = req.query['status[]'] || [];
     const skip = (page - 1) * limit;
-    // Find trucks and trailers matching the search term
     const matchingTrucks = await truck_model_1.default.find({
         unitNumber: { $regex: search, $options: 'i' },
     })
@@ -252,10 +251,10 @@ exports.getStatuses = (0, ErrorHandler_1.CatchAsyncErrors)(async (req, res) => {
             statuses = [order_types_1.OrderStatus.PENDING, order_types_1.OrderStatus.PROCESSING];
             break;
         case order_types_1.OrderStatusType.COMPLETED:
-            statuses = [
-                order_types_1.OrderStatus.REQUIRES_INVOICE,
-                order_types_1.OrderStatus.REQUIRES_CHARGE,
-            ];
+            statuses = [order_types_1.OrderStatus.REQUIRES_CHARGE];
+            break;
+        case order_types_1.OrderStatusType.REQUIRES_INVOICE:
+            statuses = [order_types_1.OrderStatus.REQUIRES_INVOICE];
             break;
         case order_types_1.OrderStatusType.PAID:
             statuses = [order_types_1.OrderStatus.CHARGED];
