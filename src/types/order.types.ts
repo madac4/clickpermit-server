@@ -102,6 +102,7 @@ export enum OrderStatusType {
 	COMPLETED = 'completed',
 	PAID = 'paid',
 	ARCHIVED = 'archived',
+	REQUIRES_INVOICE = 'requires_invoice',
 }
 
 export const formatStatus = (status: OrderStatus) => {

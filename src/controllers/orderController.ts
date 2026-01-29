@@ -317,7 +317,6 @@ export const getOrders = CatchAsyncErrors(
 
 		const skip = (page - 1) * limit
 
-		// Find trucks and trailers matching the search term
 		const matchingTrucks = await Truck.find({
 			unitNumber: { $regex: search, $options: 'i' },
 		})
@@ -388,10 +387,10 @@ export const getStatuses = CatchAsyncErrors(
 				statuses = [OrderStatus.PENDING, OrderStatus.PROCESSING]
 				break
 			case OrderStatusType.COMPLETED:
-				statuses = [
-					OrderStatus.REQUIRES_INVOICE,
-					OrderStatus.REQUIRES_CHARGE,
-				]
+				statuses = [OrderStatus.REQUIRES_CHARGE]
+				break
+			case OrderStatusType.REQUIRES_INVOICE:
+				statuses = [OrderStatus.REQUIRES_INVOICE]
 				break
 			case OrderStatusType.PAID:
 				statuses = [OrderStatus.CHARGED]
