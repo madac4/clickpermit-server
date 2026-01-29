@@ -33,17 +33,11 @@ exports.authMiddleware = authMiddleware;
 const decodeToken = async (req, res, next) => {
     const token = req.headers.authorization?.split(' ')[1];
     if (!token)
-        return new ErrorHandler_1.ErrorHandler('No token provided', 401);
+        return null;
     try {
         const decoded = jsonwebtoken_1.default.verify(token, process.env.JWT_SECRET);
         if (!decoded.id || !decoded.role) {
             return new ErrorHandler_1.ErrorHandler('Invalid token payload', 401);
-        }
-        const user = await user_model_1.default.findById(decoded.id).select('isBlocked');
-        if (!user)
-            return new ErrorHandler_1.ErrorHandler('User not found', 404);
-        if (user.isBlocked) {
-            return new ErrorHandler_1.ErrorHandler('Your account has been blocked. Please contact support.', 503);
         }
         req.user = decoded;
         return decoded;

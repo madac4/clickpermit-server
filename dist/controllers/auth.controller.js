@@ -21,19 +21,27 @@ exports.register = (0, ErrorHandler_1.CatchAsyncErrors)(async (req, res, next) =
     const decoded = await (0, authMiddleware_1.decodeToken)(req, res, next);
     if (decoded instanceof ErrorHandler_1.ErrorHandler)
         return next(decoded);
-    const user = decoded;
     let response = null;
-    if (user.role !== auth_types_1.UserRole.ADMIN && role === auth_types_1.UserRole.MODERATOR) {
-        return next(new ErrorHandler_1.ErrorHandler('You are not authorized to register a moderator', 403));
-    }
-    if (!role || role === auth_types_1.UserRole.USER) {
+    if (!decoded) {
+        if (role && role !== auth_types_1.UserRole.USER) {
+            return next(new ErrorHandler_1.ErrorHandler('You are not authorized to register a moderator', 403));
+        }
         await auth_service_1.AuthService.validateRegisterRequest(email, password);
         response = await auth_service_1.AuthService.registerUser(email, password);
     }
-    else if (user.role === auth_types_1.UserRole.ADMIN &&
-        role === auth_types_1.UserRole.MODERATOR) {
-        await auth_service_1.AuthService.validateRegisterRequest(email, password);
-        response = await auth_service_1.AuthService.registerModerator(email, password);
+    else {
+        const user = decoded;
+        if (user.role !== auth_types_1.UserRole.ADMIN) {
+            return next(new ErrorHandler_1.ErrorHandler('You are not authorized to register a moderator', 403));
+        }
+        if (!role || role === auth_types_1.UserRole.USER) {
+            await auth_service_1.AuthService.validateRegisterRequest(email, password);
+            response = await auth_service_1.AuthService.registerUser(email, password);
+        }
+        else if (role === auth_types_1.UserRole.MODERATOR) {
+            await auth_service_1.AuthService.validateRegisterRequest(email, password);
+            response = await auth_service_1.AuthService.registerModerator(email, password);
+        }
     }
     res.status(201).json(response);
 });

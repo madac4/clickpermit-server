@@ -47,10 +47,10 @@ export const decodeToken = async (
 	req: Request,
 	res: Response,
 	next: NextFunction,
-): Promise<JwtDTO | ErrorHandler> => {
+): Promise<JwtDTO | ErrorHandler | null> => {
 	const token = req.headers.authorization?.split(' ')[1]
 
-	if (!token) return new ErrorHandler('No token provided', 401)
+	if (!token) return null
 
 	try {
 		const decoded = jwt.verify(
@@ -60,17 +60,6 @@ export const decodeToken = async (
 
 		if (!decoded.id || !decoded.role) {
 			return new ErrorHandler('Invalid token payload', 401)
-		}
-
-		const user = await User.findById(decoded.id).select('isBlocked')
-
-		if (!user) return new ErrorHandler('User not found', 404)
-
-		if (user.isBlocked) {
-			return new ErrorHandler(
-				'Your account has been blocked. Please contact support.',
-				503,
-			)
 		}
 
 		req.user = decoded

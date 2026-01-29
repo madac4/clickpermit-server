@@ -30,27 +30,38 @@ export const register = CatchAsyncErrors(
 
 		if (decoded instanceof ErrorHandler) return next(decoded)
 
-		const user = decoded as JwtDTO
 		let response = null
 
-		if (user.role !== UserRole.ADMIN && role === UserRole.MODERATOR) {
-			return next(
-				new ErrorHandler(
-					'You are not authorized to register a moderator',
-					403,
-				),
-			)
-		}
-
-		if (!role || role === UserRole.USER) {
+		if (!decoded) {
+			if (role && role !== UserRole.USER) {
+				return next(
+					new ErrorHandler(
+						'You are not authorized to register a moderator',
+						403,
+					),
+				)
+			}
 			await AuthService.validateRegisterRequest(email, password)
 			response = await AuthService.registerUser(email, password)
-		} else if (
-			user.role === UserRole.ADMIN &&
-			role === UserRole.MODERATOR
-		) {
-			await AuthService.validateRegisterRequest(email, password)
-			response = await AuthService.registerModerator(email, password)
+		} else {
+			const user = decoded as JwtDTO
+
+			if (user.role !== UserRole.ADMIN) {
+				return next(
+					new ErrorHandler(
+						'You are not authorized to register a moderator',
+						403,
+					),
+				)
+			}
+
+			if (!role || role === UserRole.USER) {
+				await AuthService.validateRegisterRequest(email, password)
+				response = await AuthService.registerUser(email, password)
+			} else if (role === UserRole.MODERATOR) {
+				await AuthService.validateRegisterRequest(email, password)
+				response = await AuthService.registerModerator(email, password)
+			}
 		}
 
 		res.status(201).json(response)
